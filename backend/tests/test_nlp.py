@@ -2,15 +2,13 @@ import json
 from pathlib import Path
 import pytest
 
-from app.schemas import AspectKey, RawReview, AnalyzeResponse
+from app import catalogue
+from app.schemas import Product, RawReview
+from app.nlp.analysis import analyse, build_use_cases
+from app.nlp.opinions import extract_opinions
 from app.nlp.preprocessor import normalize_review_text
 from app.nlp.trust_scorer import calculate_trust_scores
-from app.nlp.absa_engine import (
-    extract_aspects_and_logistics,
-    classify_review_sentiment,
-    split_into_clauses,
-)
-from app.nlp.aggregator import analyze_product_pipeline, detect_temporal_drift
+from app.nlp.absa_engine import classify_review_sentiment, split_into_clauses
 
 SEED_PATH = Path(__file__).resolve().parent.parent / "app" / "data" / "seed_reviews.json"
 
@@ -50,35 +48,29 @@ def test_hinglish_and_negation_normalization():
     assert classify_review_sentiment(res4["cleaned_text"], rating=2) == "negative"
 
 
-# --- Test Suite 2: Mixed-Clause ABSA ---
+# --- Test Suite 2: Mixed-Clause Opinion Units ---
 
 
-def test_mixed_clause_absa():
-    """Verify contrasting clauses are mapped and scored correctly across aspects."""
-    mixed_text = "ANC and bass are mind-blowing, but mic quality outdoors is terrible"
-    clauses = split_into_clauses(mixed_text)
-    assert len(clauses) >= 2
+def test_mixed_clause_opinions_keep_verbatim_quotes():
+    """Contrasting clauses give opposite polarities, and every quote is copied from the review."""
+    text = "ANC and bass are mind-blowing, but mic quality outdoors is terrible. Worth 2.5k though."
+    assert len(split_into_clauses(text)) >= 2
+    review = RawReview(review_id="t1", product_query="x", rating=3, text=text, review_date="2026-08-15")
 
-    review = RawReview(
-        review_id="test_mixed_01",
-        product_query="realme buds t310",
-        rating=3,
-        title="Mixed thoughts",
-        text=mixed_text,
-        review_date="2026-08-15",
-        verified_purchase=True,
-        helpful_votes=10,
-    )
+    units = {key: (polarity, quote) for key, polarity, quote in extract_opinions(review)}
 
-    data = extract_aspects_and_logistics([review])
-    scores = {item.aspect: item.score for item in data["aspect_scores"]}
+    assert units["anc_noise_cancellation"][0] == "praise"
+    assert units["sound_quality"][0] == "praise"
+    assert units["mic_call_quality"][0] == "complaint"
+    assert all(quote in text for _, quote in units.values())
+    assert any("2.5k" in quote for _, quote in units.values()), "decimals must not split clauses"
 
-    # ANC and Bass (Sound) must score high (> 70)
-    assert scores[AspectKey.ANC_NOISE_CANCELLATION] > 70
-    assert scores[AspectKey.SOUND_QUALITY] > 70
 
-    # Mic must score low (< 40)
-    assert scores[AspectKey.MIC_CALL_QUALITY] < 40
+def test_long_term_failure_is_a_reliability_complaint():
+    review = RawReview(review_id="t2", product_query="x", rating=2, review_date="2026-09-02",
+                       text="After 3 months the right earbud stopped charging completely in case.")
+    units = {key: polarity for key, polarity, _ in extract_opinions(review)}
+    assert units["long_term_reliability"] == "complaint"
 
 
 # --- Test Suite 3: Fake Review Burst & Duplication Detection ---
@@ -105,61 +97,47 @@ def test_fake_review_burst_detection():
     assert top_rev["is_suspicious"] is False
 
 
-# --- Test Suite 4: Full Pipeline, Logistics & Temporal Drift on Seed Reviews ---
+# --- Test Suite 4: Full analysis on every catalogue product (SPEC §C.6 invariants) ---
 
 
-def test_full_pipeline_on_realme_buds_t310():
-    """Verify full end-to-end pipeline produces valid AnalyzeResponse on realme buds t310."""
-    reviews = load_seed_for_query("realme buds t310")
-    response = analyze_product_pipeline(
-        query="realme buds t310",
-        reviews=reviews,
-        data_source="cached_fallback",
-    )
+def _analyse(product_id: str):
+    item, reviews = catalogue.get_product(product_id)
+    product = Product(id=item.id, name=item.name, category=item.category, source_url=None,
+                      data_source="catalogue", collected_on=None)
+    return analyse(product, reviews)
 
-    # 1. Pydantic schema validation
-    assert isinstance(response, AnalyzeResponse)
 
-    # 2. Product metadata
-    assert response.product_metadata.name == "Realme Buds T310"
-    assert response.product_metadata.total_reviews_analyzed == len(reviews)
-    assert response.product_metadata.data_source == "cached_fallback"
+@pytest.mark.parametrize("product_id", [p.id for p in catalogue.list_products()])
+def test_analysis_invariants(product_id):
+    result = _analyse(product_id)
+    by_id = {r.review_id: r for r in result.reviews}
+    f = result.funnel
 
-    # 3. Exactly 6 aspect scores
-    assert len(response.aspect_scores) == 6
-    aspect_map = {a.aspect: a for a in response.aspect_scores}
-    assert AspectKey.SOUND_QUALITY in aspect_map
-    assert AspectKey.ANC_NOISE_CANCELLATION in aspect_map
-    assert AspectKey.MIC_CALL_QUALITY in aspect_map
-    assert AspectKey.BATTERY_LIFE in aspect_map
-    assert AspectKey.COMFORT_BUILD in aspect_map
-    assert AspectKey.VALUE_FOR_MONEY in aspect_map
+    assert f.analysed == f.collected - f.suspicious.count - f.fulfillment.count
+    assert sum(r.group == "product" for r in result.reviews) == f.analysed
+    assert sum(result.rating.distribution) == result.rating.count == f.collected
+    for aspect in result.aspects:
+        for q in aspect.quotes:
+            assert by_id[q.review_id].group == "product"
+            assert q.text in by_id[q.review_id].text
+    for claim in result.pros + result.cons:
+        assert all(rid in by_id for rid in claim.review_ids)
+    assert result.verdict.generated_by == "rule_based"
 
-    # 4. Logistics / Seller complaints separated (crushed box & late courier reviews)
-    stats = response.review_stats
-    assert stats.fulfillment_complaint_rate > 0.0
-    assert 0 < stats.overall_rating <= 5
-    assert 0 <= stats.verified_purchase_ratio <= 1
-    split = stats.sentiment_split
-    assert abs(split.positive + split.negative + split.neutral - 100) <= 0.1
 
-    # 5. Temporal Drift detected
-    # Reviews 8 and 9 cite "stopped charging after 3 months" and "using since 4 months"
-    assert response.temporal_drift.durability_warning is not None
-    assert "Durability Warning" in response.temporal_drift.durability_warning
-    assert response.temporal_drift.initial_sentiment > response.temporal_drift.long_term_sentiment
+def test_realme_verdict_matches_the_reviews():
+    """The seeded realme story: good for music/commuting, poor for calls/lasting, 4-review burst set aside."""
+    result = _analyse("realme-buds-t310")
+    verdicts = {u.name: u.verdict for u in result.use_cases}
 
-    # 6. AI Summary has exactly 3 pros and 3 cons
-    assert len(response.ai_summary.pros) == 3
-    assert len(response.ai_summary.cons) == 3
-    assert len(response.ai_summary.buying_verdict) > 10
-    assert response.ai_summary.generated_by == "rule_based"  # no LLM keys in tests
+    assert verdicts["Music"] == "good" and verdicts["Commuting"] == "good"
+    assert verdicts["Office calls"] == "poor" and verdicts["Lasting a year"] == "poor"
+    assert result.funnel.suspicious.count == 4 and "15 Jul 2026" in result.funnel.suspicious.reason
+    assert result.funnel.fulfillment.count == 4
+    assert result.verdict.warning is not None
+    assert {r.review_id for r in result.reviews if r.group == "suspicious"} == {
+        "fk_rt310_004", "fk_rt310_005", "fk_rt310_104", "fk_rt310_105"}
 
-    # 7. Top genuine reviews filtered out suspicious bot reviews
-    bot_ids = {"fk_rt310_104", "fk_rt310_105", "fk_rt310_004", "fk_rt310_005"}
-    top_ids = {r.review_id for r in response.top_genuine_reviews}
-    assert len(top_ids & bot_ids) == 0
-    assert len(response.top_genuine_reviews) <= 5
-    for r in response.top_genuine_reviews:
-        assert r.review_trust_score >= 45
-        assert r.verified_purchase is True
+
+def test_use_case_needs_two_mentions():
+    assert build_use_cases([("Gaming", ["latency"])], [])[0].verdict == "too_few"

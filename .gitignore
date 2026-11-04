@@ -76,3 +76,4 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+backend/app/data/last_failed_scrape.html

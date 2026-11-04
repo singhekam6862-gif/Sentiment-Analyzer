@@ -1,147 +1,107 @@
+"""Reads review cards out of Flipkart HTML.
+
+Flipkart's CSS class names are generated and change between deploys, so cards are found by structure.
+Both layouts seen live (2026-10-30) are handled:
+- reviews drawer on the product page: [stars · title · date] [text] [name · badge · 👍 · 👎]
+- /product-reviews/ page:             [stars · title] [Review for: variant] [text] [name · city · Helpful for N · badge · date]
+"""
+
 import hashlib
 import re
-from datetime import datetime
-from bs4 import BeautifulSoup
+from datetime import date, datetime, timedelta
+
+from bs4 import BeautifulSoup, Tag
 
 from app.schemas import RawReview
 
-
-def _normalize_date(raw_date: str) -> str:
-    """Parse various e-commerce date formats into YYYY-MM-DD."""
-    if not raw_date:
-        return "2026-01-01"
-
-    raw_clean = raw_date.strip()
-
-    # Look for "Reviewed in India on 14 August 2026"
-    match = re.search(r"on\s+(\d{1,2}\s+[A-Za-z]+\s+\d{4})", raw_clean, re.IGNORECASE)
-    if match:
-        clean_str = match.group(1)
-        for fmt in ("%d %B %Y", "%d %b %Y"):
-            try:
-                return datetime.strptime(clean_str, fmt).strftime("%Y-%m-%d")
-            except ValueError:
-                pass
-
-    # Look for "12 Aug, 2026" or "12 August 2026"
-    match = re.search(r"(\d{1,2})\s+([A-Za-z]+),?\s+(\d{4})", raw_clean)
-    if match:
-        day, month, year = match.groups()
-        for fmt in ("%d %b %Y", "%d %B %Y"):
-            try:
-                return datetime.strptime(f"{day} {month} {year}", fmt).strftime("%Y-%m-%d")
-            except ValueError:
-                pass
-
-    # Look for month and year only "Aug, 2026"
-    match = re.search(r"([A-Za-z]+),?\s+(\d{4})", raw_clean)
-    if match:
-        month, year = match.groups()
-        for fmt in ("%b %Y", "%B %Y"):
-            try:
-                return datetime.strptime(f"01 {month} {year}", f"%d {fmt}").strftime("%Y-%m-%d")
-            except ValueError:
-                pass
-
-    return raw_clean
+DATE_RE = re.compile(
+    r"^(?:(\d+|an?)\s+(minute|hour|day|week|month|year)s?\s+ago|today|yesterday"
+    r"|\d{1,2}\s+[A-Za-z]+,?\s+\d{4}|[A-Za-z]+,?\s+\d{4})$",
+    re.IGNORECASE,
+)
+RATING_RE = re.compile(r"^[1-5](?:\.0)?$")
+UNIT_DAYS = {"minute": 0, "hour": 0, "day": 1, "week": 7, "month": 30, "year": 365}
+BADGES = {"verified buyer", "verified purchase", "certified buyer"}
 
 
-def _extract_helpful_votes(text: str) -> int:
-    """Extract integer count of helpful votes from string."""
-    if not text:
-        return 0
-    text_lower = text.lower().strip()
-    if "one person" in text_lower:
-        return 1
-    match = re.search(r"(\d[\d,]*)", text_lower)
-    if match:
-        return int(match.group(1).replace(",", ""))
-    return 0
+def _clean(s: str) -> str:
+    return s.strip().lstrip("·•").strip()
 
 
-def parse_flipkart_html(html: str, product_query: str = "realme buds t310") -> list[RawReview]:
-    """Extract RawReview list from Flipkart HTML string."""
+def _normalize_date(raw: str, today: date) -> str:
+    """'28 days ago', '12 Aug, 2026' or 'Aug, 2026' → YYYY-MM-DD. Relative ages are approximate."""
+    raw = _clean(raw)
+    m = DATE_RE.match(raw)
+    if m and m.group(2):
+        n = 1 if m.group(1).lower() in ("a", "an") else int(m.group(1))
+        return (today - timedelta(days=n * UNIT_DAYS[m.group(2).lower()])).isoformat()
+    if raw.lower() in ("today", "yesterday"):
+        return (today - timedelta(days=raw.lower() == "yesterday")).isoformat()
+    cleaned = raw.replace(",", "")
+    for fmt in ("%d %b %Y", "%d %B %Y", "%b %Y", "%B %Y"):
+        try:
+            return datetime.strptime(cleaned, fmt).date().isoformat()
+        except ValueError:
+            pass
+    return today.isoformat()
+
+
+def _children(el: Tag) -> list[Tag]:
+    return [c for c in el.children if isinstance(c, Tag)]
+
+
+def _card_for(date_node) -> Tag | None:
+    """Climbs from the date text to the first ancestor that has ≥ 3 parts and starts with the star rating."""
+    el = date_node.parent
+    for _ in range(8):
+        if el is None:
+            return None
+        kids = _children(el)
+        if len(kids) >= 3 and RATING_RE.match(next(kids[0].stripped_strings, "")):
+            return el
+        el = el.parent
+    return None
+
+
+def _parse_card(card: Tag, date_text: str, today: date, product_query: str) -> RawReview | None:
+    kids = _children(card)
+    header, footer = kids[0], kids[-1]
+    head = [_clean(s) for s in header.stripped_strings]
+    title = " ".join(s for s in head[1:] if s and s != date_text) or None
+    middle = [k.get_text(" ", strip=True) for k in kids[1:-1]]
+    body = " ".join(t for t in middle if not t.startswith("Review for:"))
+    text = re.sub(r"\s*(\.\.\.|…)?\s*(read\s+)?more$", "", body, flags=re.IGNORECASE)
+    foot = [_clean(s) for s in footer.stripped_strings]
+    if not foot or not (text or title):
+        return None
+    name = foot[0]
+    review_date = _normalize_date(date_text, today)
+    votes = next((int(m.group(1).replace(",", "")) for s in foot[1:]
+                  if (m := re.fullmatch(r"(?:helpful for\s+)?(\d[\d,]*)", s, re.IGNORECASE))), 0)
+    key = f"{name}_{review_date}_{title}_{text[:30]}"
+    return RawReview(
+        review_id="fk_" + hashlib.md5(key.encode()).hexdigest()[:10],
+        product_query=product_query,
+        reviewer_name=name,
+        rating=int(float(head[0])),
+        title=title,
+        text=text or title,
+        review_date=review_date,
+        verified_purchase=any(s.lower() in BADGES for s in foot),
+        helpful_votes=votes,
+    )
+
+
+def parse_flipkart_html(html: str, product_query: str, today: date | None = None) -> list[RawReview]:
+    """Every review card on a Flipkart page, in page order, without duplicates."""
     if not html:
         return []
-
+    today = today or date.today()
     soup = BeautifulSoup(html, "html.parser")
-    review_elements = soup.find_all(class_=re.compile(r"(_2wzgFH|EPCmJX|cPHDOP)"))
-    # If cPHDOP container was matched, pick internal _2wzgFH blocks if present to avoid duplication
-    filtered_elements = []
-    for el in review_elements:
-        if "_2wzgFH" in el.get("class", []):
-            filtered_elements.append(el)
-        elif "cPHDOP" in el.get("class", []) and not el.find(class_="_2wzgFH"):
-            filtered_elements.append(el)
-
-    if not filtered_elements:
-        filtered_elements = review_elements
-
-    reviews: list[RawReview] = []
-
-    for idx, el in enumerate(filtered_elements, start=1):
-        # Rating
-        rating = 5
-        rating_el = el.find(class_=re.compile(r"(_3LWZlK|XJA2_D)"))
-        if rating_el:
-            match = re.search(r"(\d)", rating_el.get_text(strip=True))
-            if match:
-                rating = max(1, min(5, int(match.group(1))))
-
-        # Title
-        title_el = el.find(class_=re.compile(r"(_2-N8zT|z9E0IG)"))
-        title = title_el.get_text(strip=True) if title_el else None
-
-        # Text Body
-        body_el = el.find(class_=re.compile(r"(t-ZTKy|ZmyHeo)"))
-        text = ""
-        if body_el:
-            text = body_el.get_text(" ", strip=True)
-            # Remove "READ MORE" trailing button text from Flipkart cards
-            text = re.sub(r"\s*READ MORE\s*$", "", text, flags=re.IGNORECASE).strip()
-
-        # If empty text and no title, skip element (might not be an actual review block)
-        if not text and not title:
-            continue
-
-        # Reviewer Name and Date
-        author_els = el.find_all(class_=re.compile(r"(_2sc7ZR|_2NsDsF)"))
-        reviewer_name = "Flipkart Customer"
-        raw_date = ""
-        if author_els:
-            reviewer_name = author_els[0].get_text(strip=True)
-            if len(author_els) > 1:
-                raw_date = author_els[-1].get_text(strip=True)
-
-        review_date = _normalize_date(raw_date)
-
-        # Verified Purchase / Certified Buyer
-        certified_el = el.find(string=re.compile(r"Certified Buyer", re.IGNORECASE))
-        verified = bool(certified_el)
-
-        # Helpful / Upvotes
-        helpful_el = el.find(class_=re.compile(r"(_23vquh|tlQjTr)"))
-        if not helpful_el:
-            helpful_el = el.find(class_=re.compile(r"(_1LmwT9|pkR401)"))
-        helpful_votes = _extract_helpful_votes(helpful_el.get_text(strip=True)) if helpful_el else 0
-
-        # Review ID
-        unique_hash = hashlib.md5(f"{reviewer_name}_{review_date}_{text[:30]}".encode()).hexdigest()[:8]
-        review_id = f"fk_{unique_hash}_{idx}"
-
-        reviews.append(
-            RawReview(
-                review_id=review_id,
-                platform="flipkart",
-                product_query=product_query,
-                reviewer_name=reviewer_name,
-                rating=rating,
-                title=title,
-                text=text,
-                review_date=review_date,
-                verified_purchase=verified,
-                helpful_votes=helpful_votes,
-            )
-        )
-
-    return reviews
+    reviews: dict[str, RawReview] = {}
+    for node in soup.find_all(string=lambda s: s and DATE_RE.match(_clean(s))):
+        card = _card_for(node)
+        review = _parse_card(card, _clean(node), today, product_query) if card else None
+        if review:
+            reviews.setdefault(review.review_id, review)
+    return list(reviews.values())

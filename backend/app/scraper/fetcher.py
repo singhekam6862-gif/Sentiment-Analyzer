@@ -1,25 +1,26 @@
 import asyncio
 import logging
-from typing import Any
+import os
 
-from app.scraper.flipkart import ScrapeBlockedError, scrape_flipkart
-from app.scraper.hybrid_scraper import SCRAPE_TIMEOUT_SECONDS, load_seed_reviews
+from app.schemas import RawReview
+from app.scraper.flipkart import ScrapeBlockedError, scrape_flipkart_url
 
 logger = logging.getLogger(__name__)
 
+LIVE_BUDGET_SECONDS = 90.0  # safety net for a stalled page (SPEC §D.1); the crawl normally ends at 50 reviews first
 
-async def fetch_reviews(query: str) -> tuple[list[dict[str, Any]], str]:
-    """Return (reviews, data_source). Never raises on scrape failure (SPEC §D.3)."""
+
+async def fetch_url_reviews(url: str) -> list[RawReview]:
+    """One live attempt within the budget. Returns [] on block, timeout or any error; never raises."""
+    if os.getenv("FORCE_FALLBACK", "0") == "1":
+        return []
     try:
-        reviews = await asyncio.wait_for(
-            scrape_flipkart(query, timeout=SCRAPE_TIMEOUT_SECONDS), timeout=SCRAPE_TIMEOUT_SECONDS
+        # Own loop in a worker thread: uvicorn --reload on Windows runs a selector loop, where Playwright can't spawn its browser.
+        return await asyncio.to_thread(
+            lambda: asyncio.run(asyncio.wait_for(scrape_flipkart_url(url, timeout=LIVE_BUDGET_SECONDS), LIVE_BUDGET_SECONDS))
         )
-        if not reviews:
-            raise ScrapeBlockedError("empty result")
-        return [r.model_dump() for r in reviews], "live_scrape"
     except (asyncio.TimeoutError, ScrapeBlockedError) as exc:
-        logger.warning("Live scrape failed (%s); using fallback", exc)
+        logger.warning("Live scrape failed (%s)", exc)
     except Exception:
-        logger.exception("Unexpected scraper error; using fallback")
-
-    return [r.model_dump() for r in load_seed_reviews(query)], "cached_fallback"
+        logger.exception("Unexpected scraper error")
+    return []

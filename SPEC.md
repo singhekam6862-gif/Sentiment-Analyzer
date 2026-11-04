@@ -1,91 +1,68 @@
-# SPEC — E-Commerce Sentiment & Review Authenticity Tool (Flipkart)
+# SPEC — Flipkart Review Analyser
 
-> **Status:** v0.2 (single-source) · **Owner:** Ekamjot Singh
+> **Status:** v3 (rebuild) · **Owner:** Ekamjot Singh
 > **Source of truth:** This file is the contract between `/backend` and `/frontend`.
-> Any change to the `/api/v1/analyze` response shape MUST be made here first (see `CLAUDE.md`).
+> Any change to the `/api/v3` request or response shapes MUST be made here first (see `CLAUDE.md`).
+> v0.2 is preserved in git (commit `e108e44`); `docs/REBUILD_PLAN.md` explains why v3 exists.
 
 ---
 
-## A. Project Overview & Core Features
+## A. What the product does
 
-A tool that takes a product query (e.g. `realme Buds T310`), collects its **Flipkart** reviews, and returns an analysis of what buyers actually think — and how much of that feedback can be trusted. Two products can be analysed side by side.
+Every screen helps answer one question: **"Should I buy this, and what will annoy me if I do?"**
 
-### A.1 Single-Source Review Collection (Flipkart)
-- **Flipkart is the only review source.** Its review pages are public (no login), and Indian buyers write a lot of Hinglish there.
-- **Why not Amazon.in:** since late 2024 Amazon shows logged-out visitors only ~8 top reviews and puts the full review list behind a sign-in. That is too few reviews for burst/duplicate detection, and scraping behind a login is off-limits for this project.
-- Every review carries `platform = "flipkart"` internally; the public contract no longer exposes a platform field.
+Input: a product from the local catalogue, or a pasted Flipkart product link. Output: a verdict page built only from that product's Flipkart reviews.
 
-### A.2 Overall Sentiment Polarity (with Hinglish Normalization)
-- Every review is classified as **Positive**, **Negative**, or **Neutral**; the product's percentages sum to 100.
-- A **Hinglish normalizer** runs before classification, mapping common Indian e-commerce slang/code-mixed phrases to sentiment-bearing English equivalents. Examples:
+### A.1 Rules every feature follows
+1. **Every claim links to evidence.** Aspect counts, use-case verdicts and pros/cons point to the reviews behind them. Quotes are verbatim substrings of real reviews.
+2. **Counts, not opaque scores.** "Battery: 3 praise, 2 complaints", never "Battery 62/100".
+3. **Honest uncertainty.** Thin evidence is labelled (`confidence: low`, `too_few`), never hidden behind a neutral number.
+4. **Any product category.** Aspects come from the reviews. A category template (e.g. TWS earbuds) only seeds names and use cases; the LLM path finds aspects for anything.
 
-  | Hinglish input        | Normalized meaning     | Polarity |
-  |-----------------------|------------------------|----------|
-  | `paisa vasool`        | good value for money   | Positive |
-  | `mast` / `ekdum mast` | excellent              | Positive |
-  | `badhiya`             | very good              | Positive |
-  | `bakwas`              | rubbish / useless      | Negative |
-  | `bekar` / `bekaar`    | useless                | Negative |
-  | `paisa barbaad`       | waste of money         | Negative |
-  | `theek thaak`         | okay / average         | Neutral  |
+### A.2 Single source: Flipkart
+- Flipkart review pages are public (no login), and Indian buyers write a lot of Hinglish there.
+- Amazon.in is not a source: since late 2024 it shows logged-out visitors only ~8 top reviews and puts the rest behind a sign-in.
 
-- Preprocessing **must preserve negations** (`not`, `never`, `no`, `nahi`, `mat`) and **emojis** (see `CLAUDE.md` guardrail 4).
+### A.3 Review groups (the funnel)
+Every collected review lands in exactly one group:
 
-### A.3 Aspect-Based Sentiment Analysis (ABSA)
-Scores each product across 6 electronics pillars, **0–100** (50 = neutral / no signal):
+| Group | Rule | Used for aspects / verdict? |
+|---|---|---|
+| `suspicious` | Trust score < 45 (signals below) | No. Shown separately with the reason. |
+| `fulfillment` | Negative and about delivery, packaging, seller or refund, not the product | No. Shown separately. |
+| `product` | Everything else | Yes |
 
-| Aspect key                | Example cue phrases                                        |
-|---------------------------|------------------------------------------------------------|
-| `sound_quality`           | bass, treble, clarity, audio, sound                        |
-| `anc_noise_cancellation`  | ANC, noise cancellation, transparency mode, outside noise  |
-| `mic_call_quality`        | mic, calls, voice, the other person can't hear             |
-| `battery_life`            | battery, backup, charging, hours, case charge              |
-| `comfort_build`           | fit, ear pain, comfortable, build, plastic, hinge          |
-| `value_for_money`         | price, worth, paisa vasool, overpriced, budget             |
+Trust signals (each lowers the score): unverified purchase; same-day burst (≥ 3 unverified 5★ on one date); short generic praise with no aspect; near-duplicate text (≥ 70 % token overlap); rating/text mismatch. The UI never shows a trust *number*; it shows the funnel and the reasons.
 
-- An aspect with zero mentions scores `50` and its `summary` says there wasn't enough data.
+### A.4 Sentiment and Hinglish
+- Each product review is `positive`, `negative` or `neutral`.
+- A Hinglish normalizer runs first (`paisa vasool` → good value, `bakwas` → rubbish, `theek thaak` → okay, …).
+- Preprocessing **must preserve negations** (`not`, `never`, `no`, `nahi`, `mat`, `na`) and **emojis** (`CLAUDE.md` guardrail 4).
 
-### A.4 Authenticity / Fake Review Detection ("Trust Score")
-- **Per-review** `review_trust_score` (0–100) and a **per-product** `trust_score` (0–100, the mean over reviews, weighted by helpful votes).
-- Signals that lower trust:
+### A.5 Aspects (opinion units)
+- For each product review, extract opinion units: `{aspect, polarity, quote}` where `quote` is the exact sentence or clause that carries the opinion.
+- **LLM path** (Groq → Gemini, `LLM_PROVIDERS` order): few-shot extraction, ~20 reviews per call, JSON validated against the schema; quotes not found verbatim in the review are dropped.
+- **Rule-based path** (no key, or every provider failed): category keyword lexicon + clause splitting + the Hinglish-aware clause scorer.
+- Aspect counts: `praise`, `complaints`, `mixed` = number of product reviews with that polarity for the aspect (one vote per review per aspect).
+- `confidence`: `high` ≥ 6 mentions, `medium` 4–5, `low` ≤ 3.
+- **Long-term reliability** is a built-in aspect: opinion units from reviews written after weeks/months of use (`after 3 months`, `6 months use`, `ab kharab ho gaya`, `stopped working`, …) that report a failure or degradation.
 
-  | Signal               | Heuristic                                                                   |
-  |----------------------|-----------------------------------------------------------------------------|
-  | Unverified purchase  | `verified_purchase == false` (Flipkart: no "Certified Buyer" badge)         |
-  | Review burst         | ≥ 3 unverified 5★ reviews posted on the same date                            |
-  | Extreme brevity      | Very short text (< 6 tokens) that is generic praise with no aspect mention  |
-  | Generic phrasing     | Mostly template words ("nice product", "good", "best") with no aspect mention |
-  | Duplicate text       | Near-identical text (≥ 70 % token overlap) to other reviews                  |
-  | Rating/text mismatch | 5★ with strongly negative text, or 1★ with strongly positive text           |
+### A.6 Use-case verdicts ("Is it good for…")
+- Up to 6 use cases per product (earbuds: Music, Commuting, Gym and running, Office calls, Lasting a year, Gaming). Each maps to one or more aspects.
+- From the mapped opinion units: `praise_share = praise / (praise + complaints)`.
+  `good` ≥ 0.75 · `okay` 0.40–0.75 · `poor` < 0.40 · `too_few` when fewer than 2 reviews mention it.
+- `reason` is one short sentence; `review_count` is the number of reviews it is based on.
+- A product whose category has no template and no LLM answer returns `use_cases: []`; the UI hides the section.
 
-- Reviews below `45` get `is_suspicious = true` and list their triggered `trust_flags`.
+### A.7 Verdict, pros and cons
+- `verdict.headline`: one or two sentences ("Great for music and commuting at this price. Not for office calls, and it may not last a year.").
+- `verdict.warning`: one sentence when long-term reliability has ≥ 2 complaints and no more praise than complaints; else `null`.
+- Up to 3 pros and 3 cons, each with the `review_ids` it came from.
+- Written by the LLM chain **from the aggregated opinion units**, not raw reviews. Deterministic fallback builds them from the top/bottom aspects. `generated_by` reports `groq`, `gemini` or `rule_based`.
+- LLM answers are cached in `backend/app/data/cache.sqlite`, keyed by a hash of prompt + model.
 
-### A.5 Product vs. Seller/Logistics Separation
-- Each negative review is classified as a **product** complaint (defect, performance) or a **fulfillment** complaint (late delivery, damaged box, wrong item, seller behaviour, refund issues).
-- `fulfillment_complaint_rate` = fulfillment-caused negatives ÷ all negatives × 100.
-- Fulfillment complaints are **excluded from ABSA scores** so they don't count against the product's own quality.
-
-### A.6 Temporal Sentiment Drift
-- Splits reviews into **initial** (Day-1 / first-impression) and **long-term** (durability) cohorts.
-- Long-term cues: `after 3 months`, `after 2 weeks`, `ab kharab ho gaya`, `stopped working`, `still working`, `6 months use`.
-- If long-term sentiment falls by ≥ 15 points below initial sentiment, return a `durability_warning` string; otherwise `null`.
-
-### A.7 AI Pros & Cons Summary
-- An LLM pass over non-suspicious reviews produces **exactly 3 pros** and **exactly 3 cons** (short, specific bullets), plus a one-sentence `buying_verdict`.
-- **Provider chain:** providers are tried in the order given by `LLM_PROVIDERS` (default `groq,gemini`). A provider is skipped when its API key is unset. Both are called through their OpenAI-compatible chat-completions endpoints:
-
-  | Provider | Key env var      | Model env var  | Default model        |
-  |----------|------------------|----------------|----------------------|
-  | `groq`   | `GROQ_API_KEY`   | `GROQ_MODEL`   | `openai/gpt-oss-20b` |
-  | `gemini` | `GEMINI_API_KEY` | `GEMINI_MODEL` | `gemini-2.5-flash`   |
-
-- If every provider is unavailable or returns an invalid answer, fall back to a deterministic summary built from the top/bottom ABSA aspects.
-- `ai_summary.generated_by` reports which one produced the answer: `groq`, `gemini`, or `rule_based`.
-- LLM answers are cached in `backend/app/data/cache.sqlite`, keyed by a hash of the prompt and model, so a repeated analysis spends no API quota.
-
-### A.8 Product Comparison
-- The frontend can analyse a second product and show both side by side (stats cards, overlaid ABSA radar, both summaries).
-- This is done client-side with two independent `GET /api/v1/analyze` calls; the API itself always describes one product.
+### A.8 Comparison
+Not in v3.0. Planned as a separate page that aligns two analyses' aspects in one table.
 
 ---
 
@@ -95,360 +72,192 @@ Scores each product across 6 electronics pillars, **0–100** (50 = neutral / no
 Sentiment Analyser/
 ├── SPEC.md                         # This contract (source of truth)
 ├── CLAUDE.md                       # Operational rules for coding agents
+├── docs/REBUILD_PLAN.md            # Why v3, research, phases
 ├── backend/                        # Python 3.11+ · FastAPI · Playwright · NLP & LLM
-│   ├── .env.example                # LLM keys/models template (copy to .env, gitignored)
 │   ├── app/
-│   │   ├── main.py                 # FastAPI app + routes
+│   │   ├── main.py                 # FastAPI app + /api/v3 routes
 │   │   ├── schemas.py              # Pydantic models (mirror of Section C)
-│   │   ├── scraper/
-│   │   │   ├── flipkart.py         # Playwright scraper for Flipkart
-│   │   │   ├── parser.py           # Flipkart HTML → RawReview parser
-│   │   │   ├── hybrid_scraper.py   # Offline / snapshot / hybrid modes + seed loader
-│   │   │   ├── fetcher.py          # Timeout + fallback wrapper (Section D)
-│   │   │   └── snapshots/          # Static HTML DOM snapshots for offline parser tests
+│   │   ├── jobs.py                 # In-memory analysis jobs (background tasks)
+│   │   ├── catalogue.py            # Local product catalogue (seed_reviews.json)
+│   │   ├── scraper/                # Flipkart fetch + parse, snapshots for tests
 │   │   ├── nlp/
 │   │   │   ├── preprocessor.py     # Hinglish normalizer (negation/emoji-safe)
-│   │   │   ├── absa_engine.py      # Polarity, ABSA, logistics separation
-│   │   │   ├── trust_scorer.py     # Trust Score calculator
-│   │   │   ├── summarizer.py       # LLM provider chain + deterministic fallback
-│   │   │   └── aggregator.py       # Pipeline orchestrator + temporal drift
-│   │   └── data/
-│   │       ├── seed_reviews.json   # Fallback dataset for demo safety
-│   │       └── cache.sqlite        # LLM answer cache (gitignored)
-│   ├── tests/                      # pytest suite
-│   └── requirements.txt
-└── frontend/                       # Next.js (App Router) · TypeScript · Tailwind CSS · Recharts · Lucide Icons
-    ├── src/app/                    # Routes (search page + results dashboard)
-    ├── src/components/             # Charts, stats cards, review list, inspector
-    ├── src/lib/api.ts              # Typed fetch client
-    ├── src/types/analysis.ts       # TS types mirroring Section C
-    └── package.json
+│   │   │   ├── absa_engine.py      # Clause sentiment, keyword aspects, logistics split
+│   │   │   ├── trust_scorer.py     # Trust signals → suspicious group
+│   │   │   ├── opinions.py         # Opinion units (LLM path + rule-based path)
+│   │   │   ├── categories.py       # Category templates: aspect labels, use cases
+│   │   │   ├── llm.py              # Provider chain (Groq → Gemini) + answer cache
+│   │   │   ├── summarizer.py       # Verdict/pros/cons prompt (LLM) — rule-based fallback lives in analysis.py
+│   │   │   └── analysis.py         # Pipeline orchestrator → Analysis (Section C)
+│   │   └── data/seed_reviews.json  # Offline catalogue
+│   └── tests/
+└── frontend/                       # Next.js (App Router) · TypeScript · Tailwind CSS
+    ├── src/app/                    # / (search + catalogue), /analysis/[jobId]
+    ├── src/components/             # Verdict, use cases, aspects, funnel, reviews
+    ├── src/lib/api.ts              # Typed fetch client + job polling
+    └── src/types/analysis.ts       # TS types mirroring Section C
 ```
 
 ---
 
-## C. Strict Data Contract — `GET /api/v1/analyze`
+## C. Strict Data Contract — `/api/v3`
 
-### C.1 Request
+All responses are JSON. Errors use FastAPI's `{"detail": "..."}`.
 
+### C.1 `GET /api/v3/products`
+The offline catalogue.
+
+```json
+[{ "id": "realme-buds-t310", "name": "realme Buds T310", "category": "TWS earbuds", "review_count": 24 }]
 ```
-GET /api/v1/analyze?query=realme+buds+t310&mode=offline
+
+### C.2 `POST /api/v3/analyses`
+Body: exactly one of `product_id` (catalogue id) or `url` (a `https://www.flipkart.com/...` product link).
+
+```json
+{ "product_id": "realme-buds-t310" }
 ```
 
-| Param           | Type   | Required | Notes                                                      |
-|-----------------|--------|----------|------------------------------------------------------------|
-| `query`         | string | yes      | Product search query, 2–120 characters                     |
-| `mode`          | string | no       | `hybrid` (default, live with fallback), `offline` (seed), `snapshot` (local HTML) |
-| `force_refresh` | bool   | no       | Bypass the in-memory response cache                        |
+Returns `202` with an `AnalysisJob` (C.4). Errors: `422` (neither/both fields, or a non-Flipkart URL), `404` (unknown `product_id`).
 
-### C.2 Response — JSON Schema (Draft 2020-12)
+### C.3 `GET /api/v3/analyses/{job_id}`
+Returns the `AnalysisJob`. `404` when the job id is unknown (jobs live in memory and vanish on restart).
+
+### C.4 `AnalysisJob`
 
 ```json
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://sentiment-analyser.local/schemas/analyze-response.json",
-  "title": "AnalyzeResponse",
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "product_metadata",
-    "review_stats",
-    "aspect_scores",
-    "temporal_drift",
-    "ai_summary",
-    "top_genuine_reviews"
-  ],
-  "properties": {
-    "product_metadata": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["name", "category", "image_url", "total_reviews_analyzed", "data_source"],
-      "properties": {
-        "name": { "type": "string" },
-        "category": { "type": "string" },
-        "image_url": { "type": ["string", "null"], "format": "uri" },
-        "total_reviews_analyzed": { "type": "integer", "minimum": 0 },
-        "data_source": { "type": "string", "enum": ["live_scrape", "cached_fallback"] }
-      }
-    },
-    "review_stats": { "$ref": "#/$defs/ReviewStats" },
-    "aspect_scores": {
-      "type": "array",
-      "minItems": 6,
-      "maxItems": 6,
-      "items": { "$ref": "#/$defs/AspectScore" }
-    },
-    "temporal_drift": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["initial_sentiment", "long_term_sentiment", "durability_warning"],
-      "properties": {
-        "initial_sentiment": { "type": "integer", "minimum": 0, "maximum": 100 },
-        "long_term_sentiment": { "type": "integer", "minimum": 0, "maximum": 100 },
-        "durability_warning": { "type": ["string", "null"] }
-      }
-    },
-    "ai_summary": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["pros", "cons", "buying_verdict", "generated_by"],
-      "properties": {
-        "pros": { "type": "array", "items": { "type": "string" }, "minItems": 3, "maxItems": 3 },
-        "cons": { "type": "array", "items": { "type": "string" }, "minItems": 3, "maxItems": 3 },
-        "buying_verdict": { "type": "string" },
-        "generated_by": { "type": "string", "enum": ["groq", "gemini", "rule_based"] }
-      }
-    },
-    "top_genuine_reviews": {
-      "type": "array",
-      "maxItems": 5,
-      "items": { "$ref": "#/$defs/GenuineReview" }
-    }
-  },
-  "$defs": {
-    "SentimentSplit": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["positive", "negative", "neutral"],
-      "description": "Percentages; positive + negative + neutral = 100 (±0.1 rounding).",
-      "properties": {
-        "positive": { "type": "number", "minimum": 0, "maximum": 100 },
-        "negative": { "type": "number", "minimum": 0, "maximum": 100 },
-        "neutral": { "type": "number", "minimum": 0, "maximum": 100 }
-      }
-    },
-    "ReviewStats": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "overall_rating",
-        "sentiment_split",
-        "trust_score",
-        "verified_purchase_ratio",
-        "fulfillment_complaint_rate"
-      ],
-      "properties": {
-        "overall_rating": { "type": "number", "minimum": 0, "maximum": 5 },
-        "sentiment_split": { "$ref": "#/$defs/SentimentSplit" },
-        "trust_score": { "type": "integer", "minimum": 0, "maximum": 100 },
-        "verified_purchase_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
-        "fulfillment_complaint_rate": { "type": "number", "minimum": 0, "maximum": 100 }
-      }
-    },
-    "AspectScore": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["aspect", "score", "summary"],
-      "properties": {
-        "aspect": {
-          "type": "string",
-          "enum": [
-            "sound_quality",
-            "anc_noise_cancellation",
-            "mic_call_quality",
-            "battery_life",
-            "comfort_build",
-            "value_for_money"
-          ]
-        },
-        "score": { "type": "integer", "minimum": 0, "maximum": 100 },
-        "summary": { "type": "string" }
-      }
-    },
-    "GenuineReview": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "review_id",
-        "author",
-        "rating",
-        "title",
-        "text",
-        "review_date",
-        "verified_purchase",
-        "helpful_votes",
-        "sentiment",
-        "review_trust_score"
-      ],
-      "properties": {
-        "review_id": { "type": "string" },
-        "author": { "type": "string" },
-        "rating": { "type": "integer", "minimum": 1, "maximum": 5 },
-        "title": { "type": ["string", "null"] },
-        "text": { "type": "string" },
-        "review_date": { "type": "string", "format": "date" },
-        "verified_purchase": { "type": "boolean" },
-        "helpful_votes": { "type": "integer", "minimum": 0 },
-        "sentiment": { "type": "string", "enum": ["positive", "negative", "neutral"] },
-        "aspects_mentioned": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/AspectScore/properties/aspect" },
-          "default": []
-        },
-        "review_trust_score": { "type": "integer", "minimum": 0, "maximum": 100 }
-      }
-    }
-  }
+  "job_id": "realme-buds-t310",
+  "status": "done",
+  "message": "Analysed 16 product reviews",
+  "result": { "...": "Analysis (C.5), only when status is done" },
+  "error": null
 }
 ```
 
-### C.3 Example Response (abridged)
+| Field | Type | Notes |
+|---|---|---|
+| `job_id` | string | Catalogue jobs use the product id; URL jobs use a hash of the URL. Re-posting the same source returns the same job. |
+| `status` | `queued` \| `fetching` \| `analysing` \| `done` \| `failed` | |
+| `message` | string | Human progress line for the UI ("Fetching reviews (2/5 pages)") |
+| `result` | `Analysis` \| null | Non-null only when `done` |
+| `error` | string \| null | Non-null only when `failed`; written for the end user |
+
+### C.5 `Analysis`
 
 ```json
 {
-  "product_metadata": {
+  "product": {
+    "id": "realme-buds-t310",
     "name": "realme Buds T310",
-    "category": "TWS Earbuds",
-    "image_url": "https://example.com/realme-buds-t310.jpg",
-    "total_reviews_analyzed": 24,
-    "data_source": "cached_fallback"
+    "category": "TWS earbuds",
+    "source_url": null,
+    "data_source": "catalogue",
+    "collected_on": null
   },
-  "review_stats": {
-    "overall_rating": 3.6,
-    "sentiment_split": { "positive": 58.3, "negative": 33.3, "neutral": 8.4 },
-    "trust_score": 74,
-    "verified_purchase_ratio": 0.79,
-    "fulfillment_complaint_rate": 25.0
+  "verdict": {
+    "headline": "Great for music and commuting at this price. Not for office calls, and it may not last a year.",
+    "warning": "4 owners say a part failed after 2–6 months.",
+    "generated_by": "rule_based"
   },
-  "aspect_scores": [
-    { "aspect": "sound_quality", "score": 82, "summary": "Audio & Bass clarity received high praise from Flipkart buyers." }
+  "rating": { "average": 3.2, "count": 24, "distribution": [6, 4, 0, 7, 7] },
+  "funnel": {
+    "collected": 24,
+    "suspicious": { "count": 4, "reason": "Unverified 5★ burst on 15 Jul 2026 with near-identical text." },
+    "fulfillment": { "count": 4, "reason": "Complaints about delivery, packaging or the seller." },
+    "analysed": 16
+  },
+  "use_cases": [
+    { "name": "Music", "verdict": "good", "reason": "Heavy, clear bass and crisp vocals.", "review_count": 8 }
   ],
-  "temporal_drift": {
-    "initial_sentiment": 81,
-    "long_term_sentiment": 63,
-    "durability_warning": "Durability Warning: Long-term buyer satisfaction drops by 18 points ..."
-  },
-  "ai_summary": {
-    "pros": ["Strong bass for the price", "Effective ANC on commutes", "Reliable 30h+ battery with case"],
-    "cons": ["Average mic in windy outdoor calls", "Case hinge durability concerns", "Touch controls occasionally misfire"],
-    "buying_verdict": "A solid paisa-vasool pick for music and commuting; skip it if call quality is your priority.",
-    "generated_by": "groq"
-  },
-  "top_genuine_reviews": [
+  "aspects": [
     {
-      "review_id": "fk_rt310_101",
-      "author": "Rohit Kumar",
+      "key": "sound_quality",
+      "label": "Sound quality",
+      "praise": 7,
+      "complaints": 1,
+      "mixed": 0,
+      "confidence": "high",
+      "quotes": [{ "review_id": "fk_rt310_001", "text": "Bass is heavy and clear!", "polarity": "praise" }]
+    }
+  ],
+  "pros": [{ "text": "Punchy, clear sound with heavy bass", "review_ids": ["fk_rt310_001"] }],
+  "cons": [{ "text": "Hinge, charging or battery fail after 2–6 months", "review_ids": ["fk_rt310_008"] }],
+  "reviews": [
+    {
+      "review_id": "fk_rt310_001",
+      "author": "Ramesh Yadav",
       "rating": 4,
-      "title": "Paisa vasool ANC buds!",
-      "text": "Paisa vasool earbuds 🔥 ANC is mast for this price, bass thoda heavy hai.",
-      "review_date": "2026-08-14",
+      "title": "Mast sound and bass",
+      "text": "Bass is heavy and clear! ...",
+      "review_date": "2026-08-12",
       "verified_purchase": true,
-      "helpful_votes": 37,
+      "helpful_votes": 42,
+      "group": "product",
       "sentiment": "positive",
-      "aspects_mentioned": ["sound_quality", "anc_noise_cancellation", "value_for_money"],
-      "review_trust_score": 92
+      "aspects": ["sound_quality", "anc_noise_cancellation", "value_for_money"],
+      "flags": []
     }
   ]
 }
 ```
 
-### C.4 Matching Pydantic Models (`backend/app/schemas.py`)
+| Path | Type | Constraint |
+|---|---|---|
+| `product.data_source` | `live_scrape` \| `catalogue` | |
+| `product.collected_on` | date \| null | Date of a live scrape |
+| `verdict.generated_by` | `groq` \| `gemini` \| `rule_based` | |
+| `rating.average` | number | 0–5, one decimal, over **all** collected reviews (what Flipkart shows) |
+| `rating.distribution` | int[5] | Counts for 1★…5★, index 0 = 1★ |
+| `use_cases[]` | 0–6 items | `verdict`: `good` \| `okay` \| `poor` \| `too_few` |
+| `aspects[]` | 0–8 items | Sorted by `praise + complaints + mixed` desc; `key` is a snake_case slug; `confidence`: `high` \| `medium` \| `low` |
+| `aspects[].quotes[]` | 0–4 items | `polarity`: `praise` \| `complaint` \| `mixed`; complaints first when the aspect has more complaints than praise |
+| `pros`, `cons` | 0–3 items each | |
+| `reviews[]` | all collected reviews | `group`: `product` \| `fulfillment` \| `suspicious`; `sentiment`: `positive` \| `negative` \| `neutral`; sorted by `helpful_votes` desc |
 
-```python
-class ReviewStats(StrictModel):
-    overall_rating: float = Field(ge=0, le=5)
-    sentiment_split: SentimentSplit
-    trust_score: Score
-    verified_purchase_ratio: float = Field(ge=0, le=1)
-    fulfillment_complaint_rate: Percent
-
-
-class AspectScore(StrictModel):
-    aspect: AspectKey
-    score: Score
-    summary: str
-
-
-class AISummary(StrictModel):
-    pros: list[str] = Field(min_length=3, max_length=3)
-    cons: list[str] = Field(min_length=3, max_length=3)
-    buying_verdict: str
-    generated_by: Literal["groq", "gemini", "rule_based"]
-
-
-class GenuineReview(StrictModel):
-    review_id: str
-    author: str
-    rating: int = Field(ge=1, le=5)
-    title: str | None
-    text: str
-    review_date: date
-    verified_purchase: bool
-    helpful_votes: int = Field(ge=0)
-    sentiment: Literal["positive", "negative", "neutral"]
-    aspects_mentioned: list[AspectKey] = Field(default_factory=list)
-    review_trust_score: Score
-
-
-class AnalyzeResponse(StrictModel):
-    product_metadata: ProductMetadata
-    review_stats: ReviewStats
-    aspect_scores: list[AspectScore] = Field(min_length=6, max_length=6)
-    temporal_drift: TemporalDrift
-    ai_summary: AISummary
-    top_genuine_reviews: list[GenuineReview] = Field(max_length=5)
-```
-
-`ProductMetadata`, `SentimentSplit`, `TemporalDrift` and `AspectKey` are unchanged from v0.1; see `backend/app/schemas.py` for the full file.
-
-### C.5 Contract Invariants
-1. `aspect_scores` always contains **all 6 aspects exactly once**, in the order listed in `AspectKey`.
-2. `top_genuine_reviews` excludes suspicious reviews (`review_trust_score < 45`) and is sorted by `helpful_votes` desc, then `review_trust_score` desc (may hold fewer than 5).
-3. `sentiment_split` values sum to 100 (±0.1 rounding tolerance).
-4. The response shape never changes; missing data yields neutral defaults (aspect score `50`), not omitted fields.
-5. Errors use FastAPI's standard `{"detail": "..."}` with `422` (bad query), `404` (no reviews found for the query, live or seed), or `503` (live scrape *and* fallback both unavailable — should never happen in demo mode).
+### C.6 Invariants
+1. `funnel.analysed == funnel.collected - funnel.suspicious.count - funnel.fulfillment.count`, and the group counts in `reviews` match the funnel.
+2. Every `quotes[].text` is a verbatim substring of the review with that `review_id`, and that review is in the `product` group.
+3. Every id in `pros[].review_ids` / `cons[].review_ids` exists in `reviews`.
+4. Aspect counts and use cases use `product` reviews only.
+5. Missing data yields empty arrays or `null` per the table above, never omitted fields.
 
 ---
 
-## D. Hybrid Scraping & Anti-Block Architecture
+## D. Collecting reviews (background jobs)
 
 ### D.1 The Golden Rule
-
-> **Live scraping on Flipkart MUST ALWAYS be wrapped in a try/except with a hard timeout of max 8 seconds, and MUST gracefully fall back to `/backend/app/data/seed_reviews.json`.**
-> The app must never crash during a live demo or get stuck in a CAPTCHA loop.
+> **Live collection runs in a background job with one attempt that stops at 50 reviews, inside a hard 90-second safety budget. Any CAPTCHA, block, timeout or parse failure ends the attempt immediately. It never retries, never solves or bypasses a CAPTCHA, and never takes the API down.**
 
 ### D.2 Flow
 
 ```
-request ──► in-memory cache hit (fresh)? ──yes──► return
+POST /api/v3/analyses
+   │
+   ├─ product_id ──► catalogue reviews ──► analysing ──► done
+   │
+   └─ url ──► job already done or running? ──yes──► return it
                 │ no
                 ▼
-        live Flipkart scrape (Playwright, headless)
-        asyncio.wait_for(..., timeout=8.0)
+            fetching: Flipkart review pages (≤ 50 reviews, ≤ 8 pages, 1–2 s jitter, ≤ 90 s total)
                 │
-     ┌──────────┼───────────────────────────────┐
-     │ success  │ TimeoutError / CAPTCHA / block │ any other Exception / empty
-     ▼          ▼                                ▼
-  analyse    log warning ──► load seed_reviews.json ──► data_source = cached_fallback
+     ┌──────────┼──────────────────────────────┐
+     │ ≥ 1 review│ CAPTCHA / block / timeout / 0 reviews
+     ▼           ▼
+  analysing   catalogue has the same product? ──yes──► analyse catalogue copy
+     │           │ no
+     ▼           ▼
+    done       failed (error explains what happened and suggests the catalogue)
 ```
 
-### D.3 Reference Wrapper (`backend/app/scraper/fetcher.py`)
+### D.3 Anti-block rules
+- **CAPTCHA detection = immediate abort** ("Are you a human?", "Access to this page has been denied", blocked pages). Never retry, solve or bypass.
+- **No retry loops.** One live attempt per job; a failed URL job can be re-posted by the user, not automatically.
+- **Bounded crawl:** stops as soon as 50 unique reviews are read (extra reviews on the last page are dropped). Max 8 review pages (`/product-reviews/…&page=N`, 10 reviews each, spare pages cover duplicates), 1–2 s jitter between pages. Stops early at the first page that adds no new reviews. The 90 s budget is only a safety net for a stalled page; a normal crawl ends at 50 reviews well before it.
+- **`FORCE_FALLBACK=1`** disables live collection entirely (demos, CI): URL jobs go straight to the catalogue check.
+- **Never scrape Amazon.**
 
-```python
-async def fetch_reviews(query: str) -> tuple[list[dict], str]:
-    """Return (reviews, data_source). Never raises on scrape failure."""
-    try:
-        reviews = await asyncio.wait_for(
-            scrape_flipkart(query, timeout=SCRAPE_TIMEOUT_SECONDS), timeout=SCRAPE_TIMEOUT_SECONDS
-        )
-        if not reviews:
-            raise ScrapeBlockedError("empty result")
-        return [r.model_dump() for r in reviews], "live_scrape"
-    except (asyncio.TimeoutError, ScrapeBlockedError) as exc:
-        logger.warning("Live scrape failed (%s); using fallback", exc)
-    except Exception:
-        logger.exception("Unexpected scraper error; using fallback")
-    return [r.model_dump() for r in load_seed_reviews(query)], "cached_fallback"
-```
-
-### D.4 Anti-Block Rules
-- **CAPTCHA detection = immediate abort.** If the page contains a robot-check marker (Flipkart's "Are you a human?", "Access to this page has been denied", or a blocked page), raise `ScrapeBlockedError`. **Never retry, solve, or bypass a CAPTCHA.**
-- **No retry loops.** At most one live attempt per request.
-- **Bounded crawl:** max 3 review pages, polite delay (1–2 s jitter) between pages, all inside the 8 s budget.
-- **Demo mode:** env var `FORCE_FALLBACK=1` skips live scraping completely (use for presentations and CI).
-- **Never scrape Amazon.** It is not a source any more (see A.1).
-
-### D.5 `seed_reviews.json` Shape
+### D.4 `seed_reviews.json` shape
 
 ```json
 {
@@ -473,3 +282,5 @@ async def fetch_reviews(query: str) -> tuple[list[dict], str]:
   }
 }
 ```
+
+Catalogue ids are the keys slugified (`realme buds t310` → `realme-buds-t310`).

@@ -4,9 +4,15 @@
     {
       "name": "backend-demo",
       "runtimeExecutable": "backend/.venv/Scripts/python.exe",
-      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--app-dir", "backend", "--port", "8001"],
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--app-dir", "backend", "--port", "8000"],
       "env": { "FORCE_FALLBACK": "1" },
-      "port": 8001
+      "port": 8000
+    },
+    {
+      "name": "backend-live",
+      "runtimeExecutable": "backend/.venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--app-dir", "backend", "--port", "8000", "--env-file", "backend/.env"],
+      "port": 8000
     },
     {
       "name": "frontend-prod",

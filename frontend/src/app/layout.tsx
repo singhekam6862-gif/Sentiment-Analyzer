@@ -1,20 +1,21 @@
 import type { Metadata } from "next";
+import { Barlow, Barlow_Condensed } from "next/font/google";
+import { SiteHeader } from "@/components/SiteHeader";
 import "./globals.css";
 
+const barlow = Barlow({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-barlow" });
+const condensed = Barlow_Condensed({ subsets: ["latin"], weight: ["600", "700"], variable: "--font-barlow-condensed" });
+
 export const metadata: Metadata = {
-  title: "ReviewLens AI — Flipkart Review Sentiment & Authenticity Radar",
-  description:
-    "Flipkart review sentiment analysis and authenticity engine with Hinglish normalization, ABSA radar, anti-bot trust scoring, and product comparison.",
+  title: "Review Analyser",
+  description: "What Flipkart buyers actually say about a product, with the reviews to prove it.",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className="dark h-full antialiased">
-      <body className="min-h-full flex flex-col bg-slate-950 text-slate-100 selection:bg-emerald-500/30 selection:text-emerald-200">
+    <html lang="en" className={`${barlow.variable} ${condensed.variable}`}>
+      <body className="min-h-dvh bg-paper font-sans text-ink antialiased">
+        <SiteHeader />
         {children}
       </body>
     </html>

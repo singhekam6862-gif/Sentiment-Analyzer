@@ -1,29 +1,42 @@
 @import "tailwindcss";
 
-:root {
-  --background: #020617;
-  --foreground: #f8fafc;
+/* Mockup C (desktop) + E (phone). Praise/complaint differ in lightness as well as hue. */
+@theme {
+  --color-paper: #ffffff;
+  --color-ink: #111111;
+  --color-muted: #555555;
+  --color-line: #d4d4d4;
+  --color-wash: #f3f4f6;
+  --color-praise: #1d4ed8;
+  --color-complaint: #c2410c;
+  --color-complaint-bar: #f59e0b;
+  --color-accent: #facc15;
+  --font-sans: var(--font-barlow), system-ui, sans-serif;
+  --font-display: var(--font-barlow-condensed), var(--font-barlow), sans-serif;
 }
 
 body {
-  background-color: var(--background);
-  color: var(--foreground);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  overflow-x: hidden;
+  font-variant-numeric: tabular-nums;
 }
 
-/* Custom sleek scrollbar for dark UI */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+:focus-visible {
+  outline: 2px solid var(--color-praise);
+  outline-offset: 2px;
 }
-::-webkit-scrollbar-track {
-  background: #0f172a;
+
+dialog::backdrop {
+  background: rgb(17 17 17 / 0.55);
 }
-::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 3px;
+
+@media (prefers-reduced-motion: no-preference) {
+  dialog[open] {
+    animation: sheet-in 200ms ease-out;
+  }
 }
-::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
 }

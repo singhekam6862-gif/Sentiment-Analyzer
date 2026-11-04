@@ -1,53 +1,53 @@
-export type AspectKey =
-  | "sound_quality"
-  | "anc_noise_cancellation"
-  | "mic_call_quality"
-  | "battery_life"
-  | "comfort_build"
-  | "value_for_money";
+// Mirror of SPEC.md §C (/api/v3). Change SPEC.md and backend/app/schemas.py together with this file.
 
-export interface ProductMetadata {
+export interface CatalogueProduct {
+  id: string;
   name: string;
   category: string;
-  image_url: string | null;
-  total_reviews_analyzed: number;
-  data_source: "live_scrape" | "cached_fallback";
+  review_count: number;
 }
 
-export interface SentimentSplit {
-  positive: number;
-  negative: number;
-  neutral: number;
+export type AnalysisRequest = { product_id: string } | { url: string };
+
+export interface AnalysisJob {
+  job_id: string;
+  status: "queued" | "fetching" | "analysing" | "done" | "failed";
+  message: string;
+  result: Analysis | null;
+  error: string | null;
 }
 
-export interface ReviewStats {
-  overall_rating: number;
-  sentiment_split: SentimentSplit;
-  trust_score: number;
-  verified_purchase_ratio: number;
-  fulfillment_complaint_rate: number;
+export type Polarity = "praise" | "complaint" | "mixed";
+
+export interface Quote {
+  review_id: string;
+  text: string;
+  polarity: Polarity;
 }
 
-export interface AspectScore {
-  aspect: AspectKey;
-  score: number;
-  summary: string;
+export interface Aspect {
+  key: string;
+  label: string;
+  praise: number;
+  complaints: number;
+  mixed: number;
+  confidence: "high" | "medium" | "low";
+  quotes: Quote[];
 }
 
-export interface TemporalDrift {
-  initial_sentiment: number;
-  long_term_sentiment: number;
-  durability_warning: string | null;
+export interface UseCase {
+  name: string;
+  verdict: "good" | "okay" | "poor" | "too_few";
+  reason: string;
+  review_count: number;
 }
 
-export interface AISummary {
-  pros: string[];
-  cons: string[];
-  buying_verdict: string;
-  generated_by: "groq" | "gemini" | "rule_based";
+export interface Claim {
+  text: string;
+  review_ids: string[];
 }
 
-export interface GenuineReview {
+export interface Review {
   review_id: string;
   author: string;
   rating: number;
@@ -56,48 +56,32 @@ export interface GenuineReview {
   review_date: string;
   verified_purchase: boolean;
   helpful_votes: number;
+  group: "product" | "fulfillment" | "suspicious";
   sentiment: "positive" | "negative" | "neutral";
-  aspects_mentioned: AspectKey[];
-  review_trust_score: number;
+  aspects: string[];
+  flags: string[];
 }
 
-export interface AnalyzeResponse {
-  product_metadata: ProductMetadata;
-  review_stats: ReviewStats;
-  aspect_scores: AspectScore[];
-  temporal_drift: TemporalDrift;
-  ai_summary: AISummary;
-  top_genuine_reviews: GenuineReview[];
-}
-
-export interface ProductSuggestion {
-  query: string;
-  name: string;
-  category: string;
-  image_url?: string | null;
-  total_seed_reviews: number;
-}
-
-export interface InspectReviewRequest {
-  text: string;
-  rating: number;
-  verified_purchase: boolean;
-}
-
-export interface InspectReviewResponse {
-  normalized_text: string;
-  detected_hinglish: string[];
-  sentiment_polarity: string;
-  trust_score: number;
-  is_suspicious: boolean;
-  trust_flags: string[];
-  detected_aspects: Record<string, string>;
-  is_logistics_complaint: boolean;
-}
-
-export interface HealthResponse {
-  status: string;
-  engine: string;
-  supported_platforms: string[];
-  cached_products_count: number;
+export interface Analysis {
+  product: {
+    id: string;
+    name: string;
+    category: string;
+    source_url: string | null;
+    data_source: "live_scrape" | "catalogue";
+    collected_on: string | null;
+  };
+  verdict: { headline: string; warning: string | null; generated_by: "groq" | "gemini" | "rule_based" };
+  rating: { average: number; count: number; distribution: number[] };
+  funnel: {
+    collected: number;
+    suspicious: { count: number; reason: string };
+    fulfillment: { count: number; reason: string };
+    analysed: number;
+  };
+  use_cases: UseCase[];
+  aspects: Aspect[];
+  pros: Claim[];
+  cons: Claim[];
+  reviews: Review[];
 }

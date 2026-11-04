@@ -1,14 +1,13 @@
 from datetime import date
 from enum import Enum
-from typing import Annotated, Literal
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
-
-Score = Annotated[int, Field(ge=0, le=100)]
-Percent = Annotated[float, Field(ge=0, le=100)]
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class AspectKey(str, Enum):
+    """Keyword-lexicon aspects for the rule-based path (TWS earbuds template)."""
+
     SOUND_QUALITY = "sound_quality"
     ANC_NOISE_CANCELLATION = "anc_noise_cancellation"
     MIC_CALL_QUALITY = "mic_call_quality"
@@ -55,51 +54,94 @@ class RawReview(BaseModel):
         return self.reviewer_name
 
 
-# --- /api/v1/analyze Response Contract (SPEC.md Section C) ---
+# --- /api/v3 contract (SPEC.md Section C) ---
+
+Polarity = Literal["praise", "complaint", "mixed"]
+Group = Literal["product", "fulfillment", "suspicious"]
 
 
-class ProductMetadata(StrictModel):
+class CatalogueProduct(StrictModel):
+    id: str
     name: str
     category: str
-    image_url: HttpUrl | None
-    total_reviews_analyzed: int = Field(ge=0)
-    data_source: Literal["live_scrape", "cached_fallback"]
+    review_count: int = Field(ge=0)
 
 
-class SentimentSplit(StrictModel):
-    positive: Percent
-    negative: Percent
-    neutral: Percent
+class AnalysisRequest(StrictModel):
+    product_id: str | None = None
+    url: str | None = None
+
+    @model_validator(mode="after")
+    def exactly_one_flipkart_source(self) -> "AnalysisRequest":
+        if (self.product_id is None) == (self.url is None):
+            raise ValueError("Send exactly one of product_id or url")
+        if self.url is not None and not self.url.startswith(("https://www.flipkart.com/", "https://flipkart.com/")):
+            raise ValueError("url must be a https://www.flipkart.com/ product link")
+        return self
 
 
-class ReviewStats(StrictModel):
-    overall_rating: float = Field(ge=0, le=5)
-    sentiment_split: SentimentSplit
-    trust_score: Score
-    verified_purchase_ratio: float = Field(ge=0, le=1)
-    fulfillment_complaint_rate: Percent
+class Product(StrictModel):
+    id: str
+    name: str
+    category: str
+    source_url: str | None
+    data_source: Literal["live_scrape", "catalogue"]
+    collected_on: date | None
 
 
-class AspectScore(StrictModel):
-    aspect: AspectKey
-    score: Score
-    summary: str
-
-
-class TemporalDrift(StrictModel):
-    initial_sentiment: Score
-    long_term_sentiment: Score
-    durability_warning: str | None
-
-
-class AISummary(StrictModel):
-    pros: list[str] = Field(min_length=3, max_length=3)
-    cons: list[str] = Field(min_length=3, max_length=3)
-    buying_verdict: str
+class Verdict(StrictModel):
+    headline: str
+    warning: str | None
     generated_by: Literal["groq", "gemini", "rule_based"]
 
 
-class GenuineReview(StrictModel):
+class Rating(StrictModel):
+    average: float = Field(ge=0, le=5)
+    count: int = Field(ge=0)
+    distribution: list[int] = Field(min_length=5, max_length=5)
+
+
+class FunnelGroup(StrictModel):
+    count: int = Field(ge=0)
+    reason: str
+
+
+class Funnel(StrictModel):
+    collected: int = Field(ge=0)
+    suspicious: FunnelGroup
+    fulfillment: FunnelGroup
+    analysed: int = Field(ge=0)
+
+
+class UseCase(StrictModel):
+    name: str
+    verdict: Literal["good", "okay", "poor", "too_few"]
+    reason: str
+    review_count: int = Field(ge=0)
+
+
+class Quote(StrictModel):
+    review_id: str
+    text: str
+    polarity: Polarity
+
+
+class Aspect(StrictModel):
+    key: str
+    label: str
+    praise: int = Field(ge=0)
+    complaints: int = Field(ge=0)
+    mixed: int = Field(ge=0)
+    confidence: Literal["high", "medium", "low"]
+    quotes: list[Quote] = Field(max_length=4)
+
+
+class Claim(StrictModel):
+    text: str
+    review_ids: list[str]
+
+
+class Review(StrictModel):
     review_id: str
     author: str
     rating: int = Field(ge=1, le=5)
@@ -108,51 +150,27 @@ class GenuineReview(StrictModel):
     review_date: date
     verified_purchase: bool
     helpful_votes: int = Field(ge=0)
+    group: Group
     sentiment: Literal["positive", "negative", "neutral"]
-    aspects_mentioned: list[AspectKey] = Field(default_factory=list)
-    review_trust_score: Score
+    aspects: list[str]
+    flags: list[str]
 
 
-class AnalyzeResponse(StrictModel):
-    product_metadata: ProductMetadata
-    review_stats: ReviewStats
-    aspect_scores: list[AspectScore] = Field(min_length=6, max_length=6)
-    temporal_drift: TemporalDrift
-    ai_summary: AISummary
-    top_genuine_reviews: list[GenuineReview] = Field(max_length=5)
+class Analysis(StrictModel):
+    product: Product
+    verdict: Verdict
+    rating: Rating
+    funnel: Funnel
+    use_cases: list[UseCase] = Field(max_length=6)
+    aspects: list[Aspect] = Field(max_length=8)
+    pros: list[Claim] = Field(max_length=3)
+    cons: list[Claim] = Field(max_length=3)
+    reviews: list[Review]
 
 
-# --- Endpoint Request & Response Models ---
-
-
-class HealthResponse(StrictModel):
-    status: str
-    engine: str
-    supported_platforms: list[str]
-    cached_products_count: int
-
-
-class ProductSuggestion(StrictModel):
-    query: str
-    name: str
-    category: str
-    image_url: str | None = None
-    total_seed_reviews: int = 0
-
-
-class InspectReviewRequest(BaseModel):
-    text: str = Field(..., min_length=1, description="Review text to inspect")
-    rating: int = Field(default=5, ge=1, le=5, description="Star rating 1 to 5")
-    verified_purchase: bool = Field(default=True, description="Whether purchase was verified")
-
-
-class InspectReviewResponse(StrictModel):
-    normalized_text: str
-    detected_hinglish: list[str]
-    sentiment_polarity: str
-    trust_score: Score
-    is_suspicious: bool
-    trust_flags: list[str]
-    detected_aspects: dict[str, str]
-    is_logistics_complaint: bool
-
+class AnalysisJob(StrictModel):
+    job_id: str
+    status: Literal["queued", "fetching", "analysing", "done", "failed"]
+    message: str
+    result: Analysis | None = None
+    error: str | None = None
