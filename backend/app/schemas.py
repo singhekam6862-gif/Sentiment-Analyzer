@@ -69,7 +69,7 @@ class CatalogueProduct(StrictModel):
 
 class AnalysisRequest(StrictModel):
     product_id: str | None = None
-    url: str | None = None
+    url: str | None = Field(default=None, max_length=2048)
 
     @model_validator(mode="after")
     def exactly_one_flipkart_source(self) -> "AnalysisRequest":

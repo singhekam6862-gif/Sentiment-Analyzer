@@ -227,6 +227,25 @@ def test_fetcher_scrapes_on_its_own_loop_under_selector_loop():
 
 
 @pytest.mark.asyncio
+async def test_live_scrapes_are_capped(monkeypatch):
+    """Only LIVE_SCRAPE_SLOTS browsers run at once; the rest wait their turn."""
+    running, peak = 0, 0
+
+    async def fake_scrape(url, timeout):
+        nonlocal running, peak
+        running += 1
+        peak = max(peak, running)
+        await asyncio.sleep(0.05)
+        running -= 1
+        return []
+
+    monkeypatch.setattr("app.scraper.fetcher._live_slots", asyncio.Semaphore(2))
+    with patch("app.scraper.fetcher.scrape_flipkart_url", fake_scrape):
+        await asyncio.gather(*(fetch_url_reviews(URL) for _ in range(5)))
+    assert peak == 2
+
+
+@pytest.mark.asyncio
 async def test_force_fallback_skips_live_scrape(monkeypatch):
     monkeypatch.setenv("FORCE_FALLBACK", "1")
     with patch("app.scraper.fetcher.scrape_flipkart_url") as scraper:

@@ -57,11 +57,30 @@ def test_url_job_without_reviews_fails_with_a_reason(client):
 
 @pytest.mark.parametrize(
     "body",
-    [{}, {"product_id": "realme-buds-t310", "url": "https://www.flipkart.com/x/p/y"}, {"url": "https://www.amazon.in/dp/B0X"}],
-    ids=["neither", "both", "not_flipkart"],
+    [
+        {},
+        {"product_id": "realme-buds-t310", "url": "https://www.flipkart.com/x/p/y"},
+        {"url": "https://www.amazon.in/dp/B0X"},
+        {"url": "https://www.flipkart.com/" + "a" * 2048},
+    ],
+    ids=["neither", "both", "not_flipkart", "too_long"],
 )
 def test_bad_requests_are_422(client, body):
     assert client.post("/api/v3/analyses", json=body).status_code == 422
+
+
+def test_full_job_store_drops_oldest_finished_job(client, monkeypatch):
+    monkeypatch.setattr(jobs, "MAX_JOBS", 2)
+    jobs.JOBS["old"] = jobs.AnalysisJob(job_id="old", status="done", message="")
+    jobs.JOBS["busy"] = jobs.AnalysisJob(job_id="busy", status="fetching", message="")
+    assert client.post("/api/v3/analyses", json={"product_id": "realme-buds-t310"}).status_code == 202
+    assert list(jobs.JOBS) == ["busy", "realme-buds-t310"]
+
+
+def test_job_store_full_of_running_jobs_is_429(client, monkeypatch):
+    monkeypatch.setattr(jobs, "MAX_JOBS", 1)
+    jobs.JOBS["busy"] = jobs.AnalysisJob(job_id="busy", status="fetching", message="")
+    assert client.post("/api/v3/analyses", json={"product_id": "realme-buds-t310"}).status_code == 429
 
 
 def test_unknown_product_and_job_are_404(client):

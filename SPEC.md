@@ -118,7 +118,9 @@ Body: exactly one of `product_id` (catalogue id) or `url` (a `https://www.flipka
 { "product_id": "realme-buds-t310" }
 ```
 
-Returns `202` with an `AnalysisJob` (C.4). Errors: `422` (neither/both fields, or a non-Flipkart URL), `404` (unknown `product_id`).
+Returns `202` with an `AnalysisJob` (C.4). Errors: `422` (neither/both fields, a non-Flipkart URL, or a URL over 2048 characters), `404` (unknown `product_id`), `429` (the server already holds 200 jobs and none has finished).
+
+Load limits: at most 2 live scrapes run at once (further URL jobs wait in `fetching`), and the server keeps at most 200 jobs, dropping the oldest finished one to make room.
 
 ### C.3 `GET /api/v3/analyses/{job_id}`
 Returns the `AnalysisJob`. `404` when the job id is unknown (jobs live in memory and vanish on restart).

@@ -18,6 +18,11 @@ from app.scraper.fetcher import fetch_url_reviews
 logger = logging.getLogger(__name__)
 
 JOBS: dict[str, AnalysisJob] = {}
+MAX_JOBS = 200  # bounds memory; the oldest finished job is dropped to make room
+
+
+class JobsFullError(Exception):
+    """Every slot holds a job that is still queued or running."""
 
 NO_REVIEWS = (
     "Flipkart didn't return any reviews for this link. It may have blocked the request, "
@@ -39,8 +44,20 @@ def submit(req: AnalysisRequest) -> tuple[AnalysisJob, bool]:
     existing = JOBS.get(job_id)
     if existing and existing.status != "failed":
         return existing, False
+    if existing is None:
+        _make_room()
     JOBS[job_id] = AnalysisJob(job_id=job_id, status="queued", message="Waiting to start")
     return JOBS[job_id], True
+
+
+def _make_room() -> None:
+    """Drops the oldest finished job when the store is full (dicts keep insertion order)."""
+    if len(JOBS) < MAX_JOBS:
+        return
+    oldest = next((k for k, j in JOBS.items() if j.status in ("done", "failed")), None)
+    if oldest is None:
+        raise JobsFullError
+    del JOBS[oldest]
 
 
 def _set(job_id: str, **changes) -> None:

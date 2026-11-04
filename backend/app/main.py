@@ -23,7 +23,10 @@ def list_products() -> list[CatalogueProduct]:
 def start_analysis(req: AnalysisRequest, background: BackgroundTasks) -> AnalysisJob:
     if req.product_id and catalogue.get_product(req.product_id) is None:
         raise HTTPException(404, f"No catalogue product with id '{req.product_id}'")
-    job, is_new = jobs.submit(req)
+    try:
+        job, is_new = jobs.submit(req)
+    except jobs.JobsFullError:
+        raise HTTPException(429, "The server is busy with other analyses. Try again in a minute.")
     if is_new:
         background.add_task(jobs.run, job.job_id, req)
     return job
