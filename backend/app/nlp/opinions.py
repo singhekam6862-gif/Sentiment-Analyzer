@@ -3,6 +3,7 @@
 LLM path first (any product category), rule-based keyword path per batch when no provider answers.
 """
 
+from collections.abc import Callable
 import json
 import re
 
@@ -93,14 +94,22 @@ def parse_opinions(raw_text: str, batch: dict[str, RawReview]) -> dict[str, list
     return out
 
 
-def extract_all_opinions(reviews: list[RawReview], suggested: list[str]) -> dict[str, list[Opinion]]:
-    """Opinion units for every review, in batches; keys found so far are suggested to later batches."""
+def extract_all_opinions(
+    reviews: list[RawReview], suggested: list[str], progress: Callable[[str], None] = lambda _: None
+) -> dict[str, list[Opinion]]:
+    """Opinion units for every review, in batches; keys found so far are suggested to later batches.
+
+    A provider that fails one batch is skipped for the rest, so a down provider costs one timeout, not one per batch.
+    """
     out: dict[str, list[Opinion]] = {}
     keys = list(suggested)
-    for start in range(0, len(reviews), BATCH_SIZE):
+    failed: set[str] = set()
+    total = -(-len(reviews) // BATCH_SIZE)
+    for n, start in enumerate(range(0, len(reviews), BATCH_SIZE), 1):
+        progress(f"Reading reviews (part {n} of {total})")
         batch = {r.review_id: r for r in reviews[start : start + BATCH_SIZE]}
         found = llm.ask(SYSTEM_PROMPT, build_prompt(list(batch.values()), keys),
-                        lambda raw, _provider, batch=batch: parse_opinions(raw, batch))
+                        lambda raw, _provider, batch=batch: parse_opinions(raw, batch), skip=failed)
         if found is None:
             found = {rid: extract_opinions(r) for rid, r in batch.items()}
         out.update(found)

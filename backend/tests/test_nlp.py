@@ -102,7 +102,7 @@ def test_fake_review_burst_detection():
 
 def _analyse(product_id: str):
     item, reviews = catalogue.get_product(product_id)
-    product = Product(id=item.id, name=item.name, category=item.category, source_url=None,
+    product = Product(id=item.id, name=item.name, category=item.category, source_url=None, images=[], specs=[],
                       data_source="catalogue", collected_on=None)
     return analyse(product, reviews)
 
@@ -141,3 +141,17 @@ def test_realme_verdict_matches_the_reviews():
 
 def test_use_case_needs_two_mentions():
     assert build_use_cases([("Gaming", ["latency"])], [])[0].verdict == "too_few"
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("Indoor calls are crystal clear, but outdoors the other side complains about noise.", "neutral"),
+        ("Battery drains quickly now. Case needs frequent charging.", "negative"),
+        ("Sound is great. Fit is comfortable.", "positive"),
+        ("It arrived on Tuesday.", "neutral"),
+    ],
+    ids=["praise_and_complaint", "complaint_only", "praise_only", "no_cues"],
+)
+def test_three_star_sentiment_weighs_praise_against_complaints(text, expected):
+    assert classify_review_sentiment(text, rating=3) == expected

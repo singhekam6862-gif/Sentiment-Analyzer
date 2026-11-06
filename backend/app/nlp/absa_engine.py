@@ -54,7 +54,7 @@ NEGATIVE_CUES = {
     "terrible", "bakwas", "bekar", "ghatiya", "rubbish", "garbage", "waste of money",
     "scam", "poor", "useless", "cracks", "worst", "bad", "disappointing",
     "scratched", "scratches", "stopped", "drain", "refused", "false", "crushed",
-    "broken", "damage", "delicate", "sensitive"
+    "broken", "damage", "delicate", "sensitive", "complain", "artificial", "robotic", "dropped"
 }
 
 NEGATION_CUES = {"not", "never", "no", "nahi", "mat", "definitely not", "hardly", "barely"}
@@ -137,9 +137,8 @@ def classify_review_sentiment(text: str, rating: int) -> str:
         return "negative" if avg_score < 35 else "positive"
     elif rating <= 2:
         return "positive" if avg_score > 70 else "negative"
-    else:
-        if avg_score >= 60:
-            return "positive"
-        elif avg_score <= 40:
-            return "negative"
+    # 3★: averaging lets cue-less clauses (score 50) tip a balanced review, so compare praise and complaints directly
+    has_praise, has_complaint = any(s > 50 for s in clause_scores), any(s < 50 for s in clause_scores)
+    if has_praise == has_complaint:
         return "neutral"
+    return "positive" if has_praise else "negative"

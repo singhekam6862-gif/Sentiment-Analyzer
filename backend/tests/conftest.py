@@ -3,15 +3,17 @@ import json
 import httpx
 import pytest
 
+from app import store
 from app.nlp import llm
 
 
 @pytest.fixture(autouse=True)
 def offline_llm(monkeypatch, tmp_path):
-    """Keeps every test off the network and away from the real LLM answer cache."""
+    """Keeps every test off the network and away from the real LLM cache and saved analyses."""
     for var in ("GROQ_API_KEY", "GEMINI_API_KEY", "GROQ_MODEL", "GEMINI_MODEL", "LLM_PROVIDERS", "FORCE_FALLBACK"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr(llm, "CACHE_PATH", tmp_path / "cache.sqlite")
+    monkeypatch.setattr(store, "DB_PATH", tmp_path / "cache.sqlite")
 
 
 class FakeLLM:

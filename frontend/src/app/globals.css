@@ -1,42 +1,401 @@
 @import "tailwindcss";
 
-/* Mockup C (desktop) + E (phone). Praise/complaint differ in lightness as well as hue. */
+/* Mockup C (desktop) + E (phone). Light and dark share these names; [data-theme] on <html> picks the values.
+   Chart colours checked with the dataviz validator: praise/complaint pass CVD and contrast on both card surfaces;
+   neutral is the grey midpoint of the positive/neutral/negative scale (>= 3:1 on the card). */
 @theme {
+  --color-page: #f5f5f3;
   --color-paper: #ffffff;
   --color-ink: #111111;
   --color-muted: #555555;
-  --color-line: #d4d4d4;
-  --color-wash: #f3f4f6;
+  --color-line: #dededb;
+  --color-wash: #efefed;
   --color-praise: #1d4ed8;
   --color-complaint: #c2410c;
-  --color-complaint-bar: #f59e0b;
+  --color-neutral: #8a8a8a;
   --color-accent: #facc15;
+  --color-on-accent: #111111;
+  --color-masthead: #111111;
+  --color-on-masthead: #ffffff;
+  --color-masthead-muted: #b5b5b5;
+  --color-masthead-warn: #fdba74;
+  --color-verdict: #111111;
+  --color-verdict-line: #111111;
+  --color-data: #111111;
+  --color-field: #111111;
+  --color-photo: #ffffff; /* both themes: Flipkart photos have white backgrounds and would glow on a dark tile */
+  --color-focus: var(--color-praise);
   --font-sans: var(--font-barlow), system-ui, sans-serif;
   --font-display: var(--font-barlow-condensed), var(--font-barlow), sans-serif;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+:root {
+  color-scheme: light;
+}
+
+/* Depth comes from lighter surfaces: page, then card, then the raised verdict. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-page: #121212;
+  --color-paper: #1c1c1c;
+  --color-ink: #ededed;
+  --color-muted: #a3a3a3;
+  --color-line: #333333;
+  --color-wash: #2a2a2a;
+  --color-praise: #4f8df5;
+  --color-complaint: #dc6a22;
+  --color-neutral: #737373;
+  --color-masthead: #121212;
+  --color-masthead-muted: #a3a3a3;
+  --color-verdict: #272727;
+  --color-verdict-line: #4a4a4a;
+  --color-data: #c2c2c2;
+  --color-field: #6b6b6b;
+}
+
+/* Paper is always light: browsers drop backgrounds by default, so nothing may rely on a dark fill behind light text. */
+@media print {
+  :root[data-theme] {
+    color-scheme: light;
+    --color-page: #ffffff;
+    --color-paper: #ffffff;
+    --color-ink: #111111;
+    --color-muted: #555555;
+    --color-line: #dededb;
+    --color-wash: #efefed;
+    --color-praise: #1d4ed8;
+    --color-complaint: #c2410c;
+    --color-neutral: #8a8a8a;
+    --color-masthead: #ffffff;
+    --color-on-masthead: #111111;
+    --color-masthead-muted: #555555;
+    --color-masthead-warn: #c2410c;
+    --color-verdict: #ffffff;
+    --color-verdict-line: #111111;
+    --color-data: #111111;
+    --color-field: #111111;
+  }
+
+  /* Selected pills have light text on a dark fill, and the fill doesn't print. */
+  button[aria-pressed="true"] {
+    color: var(--color-ink);
+    font-weight: 700;
+  }
+}
+
+/* Windows High Contrast removes author fills, which would blank every chart. System colours survive it. */
+@media (forced-colors: active) {
+  .bg-praise,
+  .bg-data {
+    background-color: CanvasText;
+  }
+
+  .bg-complaint {
+    background-color: Highlight;
+  }
+
+  .bg-neutral {
+    background-color: GrayText;
+  }
+
+  /* No adjust: the mode's text backplate is Canvas-coloured and would hide HighlightText. */
+  button[aria-pressed="true"] {
+    forced-color-adjust: none;
+    background-color: Highlight;
+    color: HighlightText;
+  }
 }
 
 body {
   font-variant-numeric: tabular-nums;
 }
 
-:focus-visible {
-  outline: 2px solid var(--color-praise);
-  outline-offset: 2px;
-}
-
-dialog::backdrop {
-  background: rgb(17 17 17 / 0.55);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  dialog[open] {
-    animation: sheet-in 200ms ease-out;
+/* In a layer, so a component's utilities can change the ring where the default wouldn't show. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
   }
 }
 
-@keyframes sheet-in {
-  from {
-    transform: translateY(24px);
+/* Motion. Only transform, opacity and clip-path move. Reduced motion keeps the fades and drops the movement. */
+
+button {
+  transition:
+    transform 160ms var(--ease-out),
+    background-color 150ms ease,
+    color 150ms ease,
+    border-color 150ms ease,
+    opacity 200ms ease;
+}
+
+.lift {
+  transition:
+    transform 250ms var(--ease-out),
+    border-color 150ms ease;
+}
+
+.chart-dim > * {
+  transition: opacity 200ms ease;
+}
+
+.bar-right,
+.bar-left,
+.rail {
+  transform-origin: left;
+  transition: transform 200ms var(--ease-out);
+}
+
+.bar-left {
+  transform-origin: right;
+}
+
+.bar-up {
+  transform-origin: bottom;
+}
+
+/* Hovering a chart row dims its neighbours, so one row can be read against the rest. */
+@media (hover: hover) and (pointer: fine) {
+  .chart-dim:hover > :not(:hover) {
+    opacity: 0.45;
+  }
+}
+
+/* Each child gets its own position; bars inside inherit it, so a row's bars start with their row. */
+.stagger > :nth-child(1) { --i: 0; }
+.stagger > :nth-child(2) { --i: 1; }
+.stagger > :nth-child(3) { --i: 2; }
+.stagger > :nth-child(4) { --i: 3; }
+.stagger > :nth-child(5) { --i: 4; }
+.stagger > :nth-child(6) { --i: 5; }
+.stagger > :nth-child(7) { --i: 6; }
+.stagger > :nth-child(n + 8) { --i: 7; }
+
+/* Screen only, so printing shows the whole report even if it was never scrolled. */
+@media screen {
+  [data-reveal]:not([data-seen]),
+  [data-chart]:not([data-seen]) {
     opacity: 0;
+  }
+}
+
+.fade {
+  animation: fade 200ms ease backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .rise-card,
+  [data-reveal][data-seen],
+  [data-chart][data-seen] {
+    animation: fade 200ms ease backwards;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rise {
+    animation: rise 420ms var(--ease-out) calc(var(--i, 0) * 60ms) backwards;
+  }
+
+  .rise-card,
+  [data-reveal][data-seen] {
+    animation: card-in 650ms var(--ease-out) calc(var(--i, 0) * 80ms) backwards;
+  }
+
+  /* Verdict text arrives line by line, just after its card. */
+  [data-seen].lines > * {
+    animation: rise 500ms var(--ease-out) calc(var(--i, 0) * 80ms + 120ms) backwards;
+  }
+
+  [data-seen] .pop-late {
+    display: inline-block;
+    animation: pop 350ms var(--ease-out) 550ms backwards;
+  }
+
+  /* Charts: rows arrive first, then each bar grows past its value and settles. */
+  [data-chart][data-seen] .chart-row {
+    animation: rise 450ms var(--ease-out) calc(var(--i, 0) * 70ms) backwards;
+  }
+
+  [data-chart][data-seen] .rail {
+    animation: bar-flat 450ms var(--ease-out) calc(var(--i, 0) * 70ms) backwards;
+  }
+
+  [data-chart][data-seen] .bar-right,
+  [data-chart][data-seen] .bar-left {
+    animation: bar-x 800ms var(--ease-out) calc(var(--i, 0) * 70ms + 150ms) backwards;
+  }
+
+  [data-chart][data-seen] .bar-up {
+    animation: bar-y 700ms var(--ease-out) 150ms backwards;
+  }
+
+  [data-chart][data-seen] .grow-right {
+    animation: grow-right 900ms var(--ease-in-out) 100ms backwards;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .chart-dim > :hover .bar-right,
+    .chart-dim > :hover .bar-left {
+      transform: scaleY(1.35);
+    }
+  }
+
+  .pop {
+    display: inline-block;
+    animation: pop 200ms var(--ease-out) backwards;
+  }
+
+  .step-now::after {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border: 2px solid var(--color-ink);
+    border-radius: inherit;
+    animation: ring 1.6s var(--ease-out) infinite;
+  }
+
+  button:not(:disabled, .no-press):active {
+    transform: scale(0.97);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .lift:hover {
+      transform: translateY(-4px);
+    }
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(32px) scale(0.97);
+  }
+}
+
+/* Scale, because a clip can't overshoot. 1.5% keeps the longest bar (about 320px) inside the 6px gap before its count. */
+@keyframes bar-x {
+  from { transform: scaleX(0); }
+  70% { transform: scaleX(1.015); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes bar-y {
+  from { transform: scaleY(0); }
+  70% { transform: scaleY(1.04); }
+  to { transform: scaleY(1); }
+}
+
+@keyframes bar-flat {
+  from { transform: scaleX(0); }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Funnel sweep: a clip, so all its segments reveal as one. It can't interpolate from none, hence the explicit end. */
+@keyframes grow-right {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0); }
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+@keyframes ring {
+  from {
+    opacity: 0.5;
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+/* Bottom sheet on phones, centred dialog on desktop. Exit needs overlay and display in the transition list.
+   Firefox doesn't transition display yet, so there it closes instantly. */
+dialog::backdrop {
+  background: rgb(0 0 0 / 0);
+  transition:
+    background-color 250ms var(--ease-out),
+    overlay 250ms allow-discrete,
+    display 250ms allow-discrete;
+}
+
+dialog[open]::backdrop {
+  background: rgb(0 0 0 / 0.6);
+}
+
+@starting-style {
+  dialog[open]::backdrop {
+    background: rgb(0 0 0 / 0);
+  }
+}
+
+dialog {
+  opacity: 0;
+  transition:
+    opacity 200ms var(--ease-out),
+    overlay 300ms allow-discrete,
+    display 300ms allow-discrete;
+}
+
+dialog[open] {
+  opacity: 1;
+}
+
+@starting-style {
+  dialog[open] {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  dialog {
+    transform: translateY(100%);
+    transition:
+      transform 300ms var(--ease-drawer),
+      opacity 200ms var(--ease-out),
+      overlay 300ms allow-discrete,
+      display 300ms allow-discrete;
+  }
+
+  dialog[open] {
+    transform: none;
+  }
+
+  @starting-style {
+    dialog[open] {
+      transform: translateY(100%);
+    }
+  }
+
+  @media (width >= 48rem) {
+    dialog {
+      transform: scale(0.96);
+    }
+
+    @starting-style {
+      dialog[open] {
+        transform: scale(0.96);
+      }
+    }
   }
 }

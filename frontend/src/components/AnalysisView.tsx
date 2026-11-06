@@ -13,10 +13,55 @@ async function loadJob(jobId: string): Promise<AnalysisJob> {
   try {
     return await getJob(jobId);
   } catch (err) {
-    // Jobs live in backend memory; a catalogue link can simply be started again.
+    // Saved results expire after 7 days; a catalogue link can simply be started again.
     if (jobId.startsWith("url-")) throw err;
     return startAnalysis({ product_id: jobId });
   }
+}
+
+/** Which step the job is on, from its status and the progress message the backend writes (SPEC §C.4). */
+function currentStep(job: AnalysisJob | null): number {
+  if (!job || job.status === "queued" || job.status === "fetching") return 0;
+  return job.message.startsWith("Writing") ? 2 : 1;
+}
+
+function Progress({ job, live }: { job: AnalysisJob | null; live: boolean }) {
+  const steps = [
+    live ? "Collect reviews from Flipkart" : "Load the saved reviews",
+    "Find what buyers praise and complain about",
+    "Write the verdict",
+  ];
+  const now = currentStep(job);
+  return (
+    <div className="rise max-w-xl rounded-xl border border-line bg-paper p-6 md:p-8">
+      <h1 className="font-display text-4xl font-bold">Reading the reviews…</h1>
+      <ol className="mt-6 flex flex-col gap-4">
+        {steps.map((label, i) => (
+          <li key={label} className="flex gap-3" aria-current={i === now ? "step" : undefined}>
+            <span
+              aria-hidden="true"
+              className={`relative grid size-7 shrink-0 place-items-center rounded-full text-sm font-semibold transition-colors duration-200 ${
+                i < now ? "bg-ink text-paper" : i === now ? "step-now border-2 border-ink" : "border border-line text-muted"
+              }`}
+            >
+              {i < now ? <span className="pop">✓</span> : i + 1}
+            </span>
+            <span>
+              <span className={i > now ? "text-muted" : "font-semibold"}>{label}</span>
+              {i < now && <span className="sr-only"> (done)</span>}
+              {i === now && (
+                <span aria-live="polite" className="block text-sm text-muted">
+                  <span key={job?.message} className="fade block">
+                    {job?.message ?? "Starting"}
+                  </span>
+                </span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
 }
 
 export function AnalysisView() {
@@ -43,13 +88,14 @@ export function AnalysisView() {
     };
   }, [jobId]);
 
-  if (job?.status === "done" && job.result) return <Report analysis={job.result} />;
+  // Keyed so a different product remounts the report and its scroll reveals start fresh.
+  if (job?.status === "done" && job.result) return <Report key={job.job_id} analysis={job.result} />;
 
   const failed = error ?? (job?.status === "failed" ? job.error : null);
   return (
     <main className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
       {failed ? (
-        <div role="alert" className="max-w-xl">
+        <div role="alert" className="rise max-w-xl">
           <h1 className="font-display text-4xl font-bold">We couldn’t analyse this one</h1>
           <p className="mt-3 text-lg">{failed}</p>
           <Link href="/" className="mt-6 inline-block font-semibold text-praise underline">
@@ -57,13 +103,7 @@ export function AnalysisView() {
           </Link>
         </div>
       ) : (
-        <div aria-live="polite" className="max-w-xl">
-          <h1 className="font-display text-4xl font-bold">Reading the reviews…</h1>
-          <p className="mt-3 text-lg text-muted">{job?.message ?? "Starting"}</p>
-          <div className="mt-6 h-1.5 overflow-hidden bg-wash" aria-hidden="true">
-            <div className="h-full w-1/3 animate-pulse bg-ink" />
-          </div>
-        </div>
+        <Progress job={job} live={jobId.startsWith("url-")} />
       )}
     </main>
   );

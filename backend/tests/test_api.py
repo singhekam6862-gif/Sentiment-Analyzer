@@ -1,9 +1,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app import jobs
+from app import jobs, store
 from app.main import app
-from app.schemas import Analysis
+from app.schemas import Analysis, AnalysisRequest
 
 
 @pytest.fixture
@@ -86,3 +86,41 @@ def test_job_store_full_of_running_jobs_is_429(client, monkeypatch):
 def test_unknown_product_and_job_are_404(client):
     assert client.post("/api/v3/analyses", json={"product_id": "nope"}).status_code == 404
     assert client.get("/api/v3/analyses/nope").status_code == 404
+
+
+# --- Saved analyses (app.store) ---
+
+
+def _no_analysis(*_args, **_kwargs):
+    raise AssertionError("analysis ran again for a saved product")
+
+
+def test_finished_job_survives_a_restart_without_reanalysing(client, monkeypatch):
+    client.post("/api/v3/analyses", json={"product_id": "realme-buds-t310"})
+    jobs.JOBS.clear()  # what a server restart does
+    monkeypatch.setattr(jobs, "analyse", _no_analysis)
+
+    assert client.get("/api/v3/analyses/realme-buds-t310").json()["status"] == "done"
+    again = client.post("/api/v3/analyses", json={"product_id": "realme-buds-t310"}).json()
+    assert again["status"] == "done" and again["result"]["funnel"]["analysed"] == 16
+
+
+def test_saved_analysis_expires(client, monkeypatch):
+    client.post("/api/v3/analyses", json={"product_id": "realme-buds-t310"})
+    jobs.JOBS.clear()
+    monkeypatch.setattr(store, "MAX_AGE_SECONDS", -1)
+    assert client.get("/api/v3/analyses/realme-buds-t310").status_code == 404
+
+
+def test_same_product_link_with_other_tracking_params_is_one_job():
+    base = "https://www.flipkart.com/boat-airdopes-141/p/itm9?pid=ACCX"
+    other = "https://flipkart.com/boat-airdopes-141/p/itm9/?pid=ACCX&lid=LST1&srno=s_1_1"
+    assert jobs.job_id_for(AnalysisRequest(url=base)) == jobs.job_id_for(AnalysisRequest(url=other))
+    assert jobs.job_id_for(AnalysisRequest(url=base)) != jobs.job_id_for(AnalysisRequest(url=base.replace("ACCX", "ACCY")))
+
+
+def test_url_job_that_fell_back_to_the_catalogue_is_not_saved(client):
+    url = "https://www.flipkart.com/realme-buds-t310-46db-anc/p/itm123?pid=ACCX"
+    job_id = client.post("/api/v3/analyses", json={"url": url}).json()["job_id"]
+    assert jobs.JOBS[job_id].status == "done"
+    assert store.load(job_id) is None  # the next attempt should try Flipkart again

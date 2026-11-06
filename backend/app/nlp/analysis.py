@@ -1,13 +1,14 @@
 """Pipeline orchestrator: reviews → Analysis (SPEC §A, §C.5)."""
 
 from collections import Counter, defaultdict
+from collections.abc import Callable, Sequence
 from datetime import date
 
 from app.nlp.absa_engine import classify_review_sentiment, is_logistics_complaint
 from app.nlp.categories import RELIABILITY, label, suggested_aspects, use_case_template
 from app.nlp.opinions import extract_all_opinions
 from app.nlp.preprocessor import normalize_review_text
-from app.nlp.summarizer import generate_summary
+from app.nlp.summarizer import generate_summary, generate_use_cases
 from app.nlp.trust_scorer import calculate_trust_scores
 from app.schemas import (
     Analysis, Aspect, Claim, Funnel, FunnelGroup, Product, Quote, Rating, RawReview, Review, UseCase, Verdict,
@@ -144,19 +145,26 @@ def build_funnel(reviews: list[Review]) -> Funnel:
     )
 
 
-def analyse(product: Product, raw: list[RawReview]) -> Analysis:
+def analyse(
+    product: Product, raw: list[RawReview], progress: Callable[[str], None] = lambda _: None,
+    aspect_hints: Sequence[str] = (),
+) -> Analysis:
+    """aspect_hints: Flipkart's own aspect keys for the product, suggested to the LLM after the template's keys."""
     reviews = classify_reviews(raw)
+    suggested = list(dict.fromkeys(suggested_aspects(product.name, product.category) + list(aspect_hints)))
     product_ids = {r.review_id for r in reviews if r.group == "product"}
     votes: Votes = defaultdict(list)
     opinions = extract_all_opinions(
-        [r for r in raw if r.review_id in product_ids], suggested_aspects(product.name, product.category)
+        [r for r in raw if r.review_id in product_ids], suggested, progress
     )
     for r in reviews:
         r.aspects = [key for key, _, _ in opinions.get(r.review_id, [])]
         for key, polarity, quote in opinions.get(r.review_id, []):
             votes[key].append((r.review_id, polarity, quote))
     aspects = build_aspects(votes)
-    use_cases = build_use_cases(use_case_template(product.name, product.category), aspects)
+    progress("Writing the verdict")
+    template = use_case_template(product.name, product.category) or generate_use_cases(product.name, aspects)
+    use_cases = build_use_cases(template, aspects)
     verdict, pros, cons = build_verdict(product.name, votes, aspects, use_cases)
     dist = [sum(1 for r in raw if r.rating == star) for star in range(1, 6)]
     return Analysis(

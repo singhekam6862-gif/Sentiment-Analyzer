@@ -13,11 +13,11 @@ cd backend
 python -m venv .venv
 source .venv/Scripts/activate        # Windows Git Bash  (PowerShell: .venv\Scripts\Activate.ps1)
 pip install -r requirements.txt
-playwright install chromium          # one-time browser install
 cp .env.example .env                 # then fill in GROQ_API_KEY / GEMINI_API_KEY (both optional)
 uvicorn app.main:app --reload --env-file .env   # dev server → http://127.0.0.1:8000  (docs at /docs)
 pytest                               # full test suite
 pytest tests/test_summarizer.py -v   # single module
+python -m eval                       # accuracy vs eval/gold.jsonl (offline; --llm uses the API keys)
 FORCE_FALLBACK=1 uvicorn app.main:app --reload   # demo mode: never scrape live
 ```
 
@@ -34,7 +34,7 @@ npm run build && npm run lint        # pre-commit check
 
 ## Agent Guardrails
 
-1. **No live scraping loops.** Never run live Playwright scraping in an automated loop against Amazon or Flipkart URLs (this risks IP bans and wastes tokens). Always test scraper logic against local HTML snapshot files in `/backend/app/scraper/snapshots/` first. A single manual live check is allowed only when the user explicitly asks for one. Never attempt to solve or bypass a CAPTCHA. On detection, abort and fall back (SPEC §D).
+1. **No live scraping loops.** Never run live scraping in an automated loop against Amazon or Flipkart URLs (this risks IP bans and wastes tokens). Always test scraper logic against local HTML snapshot files in `/backend/app/scraper/snapshots/` first. A single manual live check is allowed only when the user explicitly asks for one. Never attempt to solve or bypass a CAPTCHA. On detection, abort and fall back (SPEC §D).
 
 2. **The API contract is frozen without a SPEC change.** Never modify the request or response structure of any `/api/v3` endpoint without updating `SPEC.md` first, because the Next.js frontend relies strictly on this contract. Any change must update all three together: `SPEC.md` §C, `backend/app/schemas.py`, and `frontend/src/types/analysis.ts`.
 
@@ -48,5 +48,5 @@ npm run build && npm run lint        # pre-commit check
 
 - Live collection runs only inside a background job: one attempt that stops at 50 reviews, at most 8 review pages, a hard 90-second safety budget, immediate abort on CAPTCHA or block, then the catalogue fallback (SPEC §D). Never remove the budget or the page cap, raise them without a SPEC change, or add retries. The API request itself must never wait on a live scrape.
 - Don't commit secrets. LLM API keys (`GROQ_API_KEY`, `GEMINI_API_KEY`) go in `backend/.env` (gitignored; template in `backend/.env.example`). The summarizer must keep its deterministic fallback for when no key is set or every provider fails.
-- Frontend look: light, editorial, no gradients, glows, glass panels or decorative icons; counts over scores; every claim links to its reviews. Desktop follows mockup C ("Is it good for…"), phones follow mockup E (verdict card, aspect rows that open a bottom sheet).
+- Frontend look: editorial cards on a light or dark theme (colour tokens in `frontend/src/app/globals.css`, never raw hex or Tailwind palette colours in components); no gradients, glows, glass panels or decorative icons; percentages always shown with their counts, never opaque scores (SPEC §A.1); every claim links to its reviews. Charts are plain CSS, print their numbers, never use colour alone, and new chart colours are checked in both themes. Desktop follows mockup C without its "Is it good for…" cards (they repeated the aspect rows), phones follow mockup E (verdict card, aspect rows that open a bottom sheet).
 - `backend/app/data/cache.sqlite` and `.venv/` are gitignored. `seed_reviews.json` and `scraper/snapshots/*.html` are committed.
