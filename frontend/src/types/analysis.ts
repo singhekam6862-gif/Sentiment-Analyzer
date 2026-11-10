@@ -62,12 +62,19 @@ export interface Review {
   flags: string[];
 }
 
+export interface SpecGroup {
+  name: string;
+  items: { name: string; value: string }[];
+}
+
 export interface Analysis {
   product: {
     id: string;
     name: string;
     category: string;
     source_url: string | null;
+    images: string[];
+    specs: SpecGroup[];
     data_source: "live_scrape" | "catalogue";
     collected_on: string | null;
   };

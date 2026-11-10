@@ -90,11 +90,44 @@ def test_no_aspects_skips_llm(keys, fake_llm):
         (json.dumps({**GOOD_ANSWER, "pros": [{"text": "Made up", "aspect": "price_drop"}]}), []),
         (json.dumps({**GOOD_ANSWER, "pros": [{"text": " ", "aspect": "sound_quality"}]}), []),
         (json.dumps({**GOOD_ANSWER, "headline": ""}), None),
+        (json.dumps({**GOOD_ANSWER, "headline": "word " * 19}), None),
         (json.dumps({"pros": "abc"}), None),
         ("{broken", None),
     ],
-    ids=["valid", "unknown_aspect_dropped", "blank_dropped", "empty_headline", "missing_keys", "bad_json"],
+    ids=["valid", "unknown_aspect_dropped", "blank_dropped", "empty_headline", "long_headline", "missing_keys", "bad_json"],
 )
 def test_parse_llm_summary(raw, expected_pros):
     draft = summarizer.parse_llm_summary(raw, "groq", {"sound_quality", "mic_call_quality"})
     assert (draft.pros if draft else None) == expected_pros
+
+
+LONG_TITLE = "Dot Key Vitamin C E Sorbet Super Bright Moisturizer Face Reduces Skin Dullness"
+
+
+def test_short_name_comes_from_the_llm(keys, fake_llm):
+    fake_llm({"groq": {"name": "Dot Key Vitamin C E Sorbet Moisturizer"}})
+    assert summarizer.short_product_name(LONG_TITLE) == "Dot Key Vitamin C E Sorbet Moisturizer"
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [{"name": "Dot Key Glow Cream"}, {"name": "Dot Key Vitamin C E Sorbet Super Bright Moisturizer"}, {"name": ""},
+     {"name": 5}, {"other": "x"}, ["x"], "not json"],
+    ids=["invented_word", "too_long", "empty", "not_text", "no_name", "not_object", "not_json"],
+)
+def test_bad_short_name_falls_back_to_first_words(keys, fake_llm, answer):
+    fake_llm(lambda _provider, _body: answer)
+    assert summarizer.short_product_name(LONG_TITLE) == "Dot Key Vitamin C E"
+
+
+def test_short_name_without_keys_cuts_before_the_specs(fake_llm):
+    fake = fake_llm({})
+    assert summarizer.short_product_name("Acme Tab 5 Pro - (8 GB/128 GB) Wi-Fi Tablet Grey") == "Acme Tab 5 Pro"
+    assert summarizer.short_product_name("Acme Tab 5 Pro Max (8 GB) Tablet") == "Acme Tab 5 Pro Max"
+    assert fake.calls == []
+
+
+def test_short_titles_skip_the_llm(keys, fake_llm):
+    fake = fake_llm({"groq": {"name": "x"}})
+    assert summarizer.short_product_name("realme Buds T310") == "realme Buds T310"
+    assert fake.calls == []

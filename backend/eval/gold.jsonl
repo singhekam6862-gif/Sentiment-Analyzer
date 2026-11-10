@@ -1,0 +1,64 @@
+{"review_id": "fk_rt310_001", "sentiment": "positive", "group": "product", "hinglish": true, "aspects": {"sound_quality": "praise", "anc_noise_cancellation": "praise", "value_for_money": "praise"}}
+{"review_id": "fk_rt310_002", "sentiment": "negative", "group": "product", "hinglish": true, "aspects": {"mic_call_quality": "complaint"}}
+{"review_id": "fk_rt310_003", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"sound_quality": "praise", "anc_noise_cancellation": "praise", "value_for_money": "praise", "comfort_build": "complaint"}}
+{"review_id": "fk_rt310_004", "sentiment": "positive", "group": "suspicious", "hinglish": false, "aspects": {}}
+{"review_id": "fk_rt310_005", "sentiment": "positive", "group": "suspicious", "hinglish": false, "aspects": {}}
+{"review_id": "fk_rt310_006", "sentiment": "negative", "group": "fulfillment", "hinglish": false, "aspects": {}}
+{"review_id": "fk_rt310_007", "sentiment": "negative", "group": "fulfillment", "hinglish": false, "aspects": {}}
+{"review_id": "fk_rt310_008", "sentiment": "negative", "group": "product", "hinglish": false, "aspects": {"comfort_build": "complaint", "long_term_reliability": "complaint"}}
+{"review_id": "fk_rt310_009", "sentiment": "negative", "group": "product", "hinglish": true, "aspects": {"long_term_reliability": "complaint"}}
+{"review_id": "fk_rt310_010", "sentiment": "positive", "group": "product", "hinglish": true, "aspects": {"comfort_build": "praise", "battery_life": "praise"}}
+{"review_id": "fk_rt310_011", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"anc_noise_cancellation": "praise", "value_for_money": "praise"}}
+{"review_id": "fk_rt310_012", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"sound_quality": "praise", "battery_life": "praise", "comfort_build": "praise"}}
+{"review_id": "fk_rt310_101", "sentiment": "positive", "group": "product", "hinglish": true, "aspects": {"value_for_money": "praise", "anc_noise_cancellation": "praise", "sound_quality": "praise"}}
+{"review_id": "fk_rt310_102", "sentiment": "negative", "group": "product", "hinglish": true, "aspects": {"mic_call_quality": "complaint"}}
+{"review_id": "fk_rt310_103", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"anc_noise_cancellation": "praise", "comfort_build": "mixed", "sound_quality": "praise"}}
+{"review_id": "fk_rt310_104", "sentiment": "positive", "group": "suspicious", "hinglish": false, "aspects": {}}
+{"review_id": "fk_rt310_105", "sentiment": "positive", "group": "suspicious", "hinglish": false, "aspects": {}}
+{"review_id": "fk_rt310_106", "sentiment": "negative", "group": "fulfillment", "hinglish": false, "aspects": {}}
+{"review_id": "fk_rt310_107", "sentiment": "negative", "group": "fulfillment", "hinglish": false, "aspects": {}}
+{"review_id": "fk_rt310_108", "sentiment": "negative", "group": "product", "hinglish": false, "aspects": {"long_term_reliability": "complaint"}}
+{"review_id": "fk_rt310_109", "sentiment": "negative", "group": "product", "hinglish": false, "aspects": {"battery_life": "complaint", "long_term_reliability": "complaint"}}
+{"review_id": "fk_rt310_110", "sentiment": "positive", "group": "product", "hinglish": true, "aspects": {"sound_quality": "praise", "comfort_build": "praise", "battery_life": "praise"}}
+{"review_id": "fk_rt310_111", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"anc_noise_cancellation": "praise", "sound_quality": "praise", "mic_call_quality": "mixed"}}
+{"review_id": "fk_rt310_112", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"value_for_money": "praise"}}
+{"review_id": "fk_nb3p_001", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"sound_quality": "praise", "anc_noise_cancellation": "praise"}}
+{"review_id": "fk_nb3p_002", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"comfort_build": "praise", "battery_life": "praise"}}
+{"review_id": "fk_nb3p_003", "sentiment": "positive", "group": "product", "hinglish": true, "aspects": {"sound_quality": "praise", "value_for_money": "praise", "mic_call_quality": "praise"}}
+{"review_id": "fk_nb3p_004", "sentiment": "negative", "group": "product", "hinglish": false, "aspects": {"anc_noise_cancellation": "complaint", "mic_call_quality": "complaint"}}
+{"review_id": "fk_nb3p_005", "sentiment": "negative", "group": "fulfillment", "hinglish": false, "aspects": {}}
+{"review_id": "fk_nb3p_006", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"comfort_build": "praise", "sound_quality": "praise", "value_for_money": "praise"}}
+{"review_id": "fk_nb3p_007", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {}}
+{"review_id": "fk_nb3p_008", "sentiment": "negative", "group": "product", "hinglish": false, "aspects": {"battery_life": "complaint", "long_term_reliability": "complaint", "sound_quality": "praise"}}
+{"review_id": "fk_nb3p_009", "sentiment": "positive", "group": "product", "hinglish": true, "aspects": {"anc_noise_cancellation": "praise", "sound_quality": "praise"}}
+{"review_id": "fk_nb3p_010", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"value_for_money": "praise", "anc_noise_cancellation": "praise"}}
+{"review_id": "fk_nb3p_101", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"sound_quality": "praise", "anc_noise_cancellation": "praise", "battery_life": "praise"}}
+{"review_id": "fk_nb3p_102", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {}}
+{"review_id": "fk_nb3p_103", "sentiment": "neutral", "group": "product", "hinglish": false, "aspects": {"mic_call_quality": "mixed"}}
+{"review_id": "fk_nb3p_104", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"comfort_build": "praise"}}
+{"review_id": "fk_nb3p_105", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"battery_life": "praise"}}
+{"review_id": "fk_nb3p_106", "sentiment": "negative", "group": "product", "hinglish": false, "aspects": {}}
+{"review_id": "fk_nb3p_107", "sentiment": "negative", "group": "fulfillment", "hinglish": false, "aspects": {}}
+{"review_id": "fk_nb3p_108", "sentiment": "positive", "group": "product", "hinglish": true, "aspects": {"sound_quality": "praise"}}
+{"review_id": "fk_nb3p_109", "sentiment": "neutral", "group": "product", "hinglish": false, "aspects": {"anc_noise_cancellation": "mixed", "comfort_build": "praise"}}
+{"review_id": "fk_nb3p_110", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"value_for_money": "praise", "sound_quality": "praise", "comfort_build": "praise", "mic_call_quality": "praise"}}
+{"review_id": "fk_wfc700_001", "sentiment": "positive", "group": "product", "hinglish": true, "aspects": {"sound_quality": "praise", "anc_noise_cancellation": "praise"}}
+{"review_id": "fk_wfc700_002", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"comfort_build": "praise", "anc_noise_cancellation": "praise"}}
+{"review_id": "fk_wfc700_003", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"sound_quality": "praise", "mic_call_quality": "complaint"}}
+{"review_id": "fk_wfc700_004", "sentiment": "positive", "group": "product", "hinglish": true, "aspects": {"sound_quality": "praise", "anc_noise_cancellation": "praise"}}
+{"review_id": "fk_wfc700_005", "sentiment": "negative", "group": "fulfillment", "hinglish": false, "aspects": {}}
+{"review_id": "fk_wfc700_006", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {}}
+{"review_id": "fk_wfc700_007", "sentiment": "negative", "group": "product", "hinglish": false, "aspects": {"long_term_reliability": "complaint"}}
+{"review_id": "fk_wfc700_008", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"battery_life": "praise"}}
+{"review_id": "fk_wfc700_009", "sentiment": "negative", "group": "product", "hinglish": false, "aspects": {"value_for_money": "complaint"}}
+{"review_id": "fk_wfc700_010", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"anc_noise_cancellation": "praise", "comfort_build": "praise"}}
+{"review_id": "fk_wfc700_101", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"sound_quality": "praise"}}
+{"review_id": "fk_wfc700_102", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"comfort_build": "praise"}}
+{"review_id": "fk_wfc700_103", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"anc_noise_cancellation": "praise"}}
+{"review_id": "fk_wfc700_104", "sentiment": "neutral", "group": "product", "hinglish": false, "aspects": {"sound_quality": "praise", "comfort_build": "complaint", "value_for_money": "complaint"}}
+{"review_id": "fk_wfc700_105", "sentiment": "positive", "group": "product", "hinglish": true, "aspects": {"value_for_money": "praise", "sound_quality": "praise"}}
+{"review_id": "fk_wfc700_106", "sentiment": "negative", "group": "product", "hinglish": false, "aspects": {"mic_call_quality": "complaint"}}
+{"review_id": "fk_wfc700_107", "sentiment": "negative", "group": "fulfillment", "hinglish": false, "aspects": {}}
+{"review_id": "fk_wfc700_108", "sentiment": "negative", "group": "product", "hinglish": false, "aspects": {"battery_life": "complaint", "long_term_reliability": "complaint"}}
+{"review_id": "fk_wfc700_109", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"sound_quality": "praise"}}
+{"review_id": "fk_wfc700_110", "sentiment": "positive", "group": "product", "hinglish": false, "aspects": {"battery_life": "praise", "sound_quality": "praise"}}

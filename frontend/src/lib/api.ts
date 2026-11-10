@@ -1,6 +1,7 @@
 import type { AnalysisJob, AnalysisRequest, CatalogueProduct } from "@/types/analysis";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// 127.0.0.1, not localhost: uvicorn listens on IPv4 only, so localhost first fails on ::1 (~300 ms per new connection)
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, init);

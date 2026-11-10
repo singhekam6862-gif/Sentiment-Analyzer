@@ -1,309 +1,193 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Analysis, Aspect, Claim, Review, UseCase } from "@/types/analysis";
+import { AspectSheet } from "@/components/AspectSheet";
+import { AspectChart, FunnelBar, RatingBars, SentimentTimeline, hasTimeline, sentimentBuckets } from "@/components/charts";
+import { ProductGallery } from "@/components/ProductGallery";
+import { ReviewList } from "@/components/ReviewList";
+import { Card, CountUp } from "@/components/ui";
+import { percent, plural } from "@/lib/format";
+import type { Analysis, Aspect, Claim, SpecGroup } from "@/types/analysis";
 
-// Desktop follows mockup C, phones follow mockup E (SPEC/CLAUDE.md).
+// Desktop follows mockup C, phones follow mockup E (SPEC/CLAUDE.md): the same cards, stacked on phones.
 
-const VERDICT_STYLE: Record<UseCase["verdict"], { word: string; text: string; dot: string; bar: string; pips: number }> = {
-  good: { word: "Good", text: "text-praise", dot: "rounded-full bg-praise", bar: "bg-praise", pips: 5 },
-  okay: { word: "Okay", text: "text-muted", dot: "rounded-sm bg-muted", bar: "bg-muted", pips: 3 },
-  poor: { word: "Poor", text: "text-complaint", dot: "bg-complaint", bar: "bg-complaint", pips: 1 },
-  too_few: { word: "Too few reviews", text: "text-muted", dot: "rounded-full border-2 border-muted", bar: "", pips: 0 },
-};
+/**
+ * Marks [data-reveal] cards and [data-chart] charts once they scroll into view; globals.css does the motion.
+ * Fires once, never on the way back up. Charts wait until a quarter is visible, so the bars aren't missed.
+ */
+function useReveal() {
+  const root = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const mark: IntersectionObserverCallback = (entries, observer) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        e.target.setAttribute("data-seen", "");
+        observer.unobserve(e.target);
+      }
+    };
+    const rootMargin = "0px 0px -40px 0px"; // less than <main>'s bottom padding, so the last card always triggers
+    const cards = new IntersectionObserver(mark, { rootMargin });
+    const charts = new IntersectionObserver(mark, { rootMargin, threshold: 0.25 });
+    root.current?.querySelectorAll("[data-reveal]").forEach((el) => cards.observe(el));
+    root.current?.querySelectorAll("[data-chart]").forEach((el) => charts.observe(el));
+    return () => {
+      cards.disconnect();
+      charts.disconnect();
+    };
+  }, []);
+  return root;
+}
 
-const GROUP_LABEL: Record<Review["group"], string> = {
-  product: "Product reviews",
-  fulfillment: "Delivery issues",
-  suspicious: "Set aside",
-};
-
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-const stars = (n: number) => "★★★★★".slice(0, n) + "☆☆☆☆☆".slice(0, 5 - n);
-const formatDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-
-function SectionTitle({ id, children }: { id: string; children: React.ReactNode }) {
+function VerdictCard({ analysis }: { analysis: Analysis }) {
+  const { verdict, funnel } = analysis;
+  const by = verdict.generated_by === "rule_based" ? "rules from the counts" : verdict.generated_by;
   return (
-    <h2 id={id} className="mb-4 border-b-[3px] border-ink pb-2 font-display text-2xl font-bold uppercase tracking-wide md:text-3xl">
-      {children}
-    </h2>
+    <section data-reveal aria-labelledby="verdict" className="stagger lines flex min-w-0 flex-col rounded-xl border border-verdict-line bg-verdict p-5 text-on-verdict @2xl:col-span-3">
+      <h2 id="verdict" className="font-display text-xl font-bold uppercase tracking-wide md:text-2xl">Verdict</h2>
+      <p className="mt-3 max-w-3xl text-pretty text-xl font-semibold leading-snug @md:text-lg @2xl:text-xl">{verdict.headline}</p>
+      {verdict.warning && (
+        <p className="mt-3 flex gap-2 text-base text-verdict-warn">
+          <span aria-hidden="true">▲</span>
+          {verdict.warning}
+        </p>
+      )}
+      <p className="mt-auto pt-4 text-sm text-verdict-muted">
+        Based on {funnel.analysed} of {plural(funnel.collected, "review")}, written by {by}.
+      </p>
+    </section>
   );
 }
 
-function VerdictBlock({ analysis }: { analysis: Analysis }) {
-  const { product, verdict, rating, funnel } = analysis;
+function RatingCard({ rating }: { rating: Analysis["rating"] }) {
   return (
-    <section aria-labelledby="product-name">
-      <p className="text-sm text-muted">
-        {product.category} · {product.data_source === "live_scrape" ? `Collected ${product.collected_on}` : "Flipkart reviews"}
-      </p>
-      <h1 id="product-name" className="mt-1 font-display text-4xl font-bold leading-none md:text-7xl">
-        {product.name}
-      </h1>
-      <p className="mt-2 text-sm text-muted">
-        <span className="font-semibold text-ink">{rating.average.toFixed(1)}★</span> · {plural(rating.count, "rating")} ·{" "}
-        {funnel.analysed} product reviews analysed
-      </p>
-      <div className="mt-5 rounded-2xl bg-ink p-5 text-white md:rounded-none md:bg-transparent md:p-0 md:text-ink">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-neutral-300 md:hidden">Verdict</p>
-        <p className="max-w-3xl text-xl font-semibold leading-snug md:text-2xl md:font-medium">{verdict.headline}</p>
-        {verdict.warning && (
-          <p className="mt-3 flex gap-2 text-base text-orange-200 md:text-complaint">
-            <span aria-hidden="true">▲</span>
-            {verdict.warning}
-          </p>
-        )}
+    // Not a Card: in the hero's narrow column the heading sits beside the bars, which keeps this card short.
+    <section data-reveal aria-labelledby="ratings" className="flex min-w-0 flex-col gap-4 rounded-xl border border-line bg-paper p-5 transition-colors duration-200 hover:border-muted @md:flex-row @md:items-center @md:gap-6 @2xl:col-span-2 @2xl:flex-col @2xl:items-stretch">
+      <div className="shrink-0">
+        <h2 id="ratings" className="font-display text-xl font-bold uppercase tracking-wide md:text-2xl">Ratings</h2>
+        <p className="mt-2 flex items-baseline gap-2">
+          <span className="font-display text-5xl font-bold leading-none"><CountUp value={rating.average} decimals={1} /></span>
+          <span className="pop-late text-2xl" aria-hidden="true">★</span>
+        </p>
+        <p className="mt-1 text-sm text-muted">from {plural(rating.count, "rating")}</p>
+      </div>
+      <div className="min-w-0 flex-1">
+        <RatingBars distribution={rating.distribution} />
       </div>
     </section>
   );
 }
 
-function UseCases({ items }: { items: UseCase[] }) {
-  if (!items.length) return null;
-  return (
-    <section aria-labelledby="good-for" className="mt-12">
-      <SectionTitle id="good-for">Is it good for…</SectionTitle>
-      <ul className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-3 md:gap-4 md:overflow-visible md:px-0">
-        {items.map((u) => {
-          const s = VERDICT_STYLE[u.verdict];
-          return (
-            <li key={u.name} className="min-w-32 shrink-0 rounded-xl border border-line p-3 md:rounded md:p-4">
-              <div className="flex flex-col gap-1 md:flex-row md:items-baseline md:justify-between md:gap-3">
-                <h3 className="text-sm text-muted md:text-lg md:font-semibold md:text-ink">{u.name}</h3>
-                <p className={`flex items-center gap-1.5 font-display text-lg font-bold uppercase md:text-xl ${s.text}`}>
-                  <span aria-hidden="true" className={`size-3 ${s.dot}`} />
-                  {s.word}
-                </p>
-              </div>
-              <div aria-hidden="true" className="mt-2 hidden gap-0.5 md:flex">
-                {[0, 1, 2, 3, 4].map((i) => (
-                  <span key={i} className={`h-1.5 flex-1 ${i < s.pips ? s.bar : "bg-wash"}`} />
-                ))}
-              </div>
-              <p className="mt-2 hidden text-[15px] md:block">{u.reason}</p>
-              <p className="mt-1 hidden text-sm text-muted md:block">Based on {plural(u.review_count, "review")}</p>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
-}
-
-function AspectRows({ aspects, onOpen }: { aspects: Aspect[]; onOpen: (a: Aspect) => void }) {
-  const max = Math.max(1, ...aspects.map((a) => a.praise + a.complaints));
-  return (
-    <section aria-labelledby="mentions" className="min-w-0 flex-[3_1_520px]">
-      <SectionTitle id="mentions">What reviewers mention</SectionTitle>
-      {!aspects.length && <p className="text-muted">No product reviews mention specific features yet.</p>}
-      <p className="mb-2 text-sm text-muted">
-        <span className="font-semibold text-praise">▲ praise</span> ·{" "}
-        <span className="font-semibold text-complaint">▼ complaints</span> · select a row to read the reviews
-      </p>
-      <ul className="border-t border-line">
-        {aspects.map((a) => (
-          <li key={a.key} className="border-b border-line">
-            <button
-              type="button"
-              onClick={() => onOpen(a)}
-              className="flex min-h-14 w-full items-center gap-3 py-2 text-left hover:bg-wash"
-            >
-              <span className="flex-1 font-semibold">
-                {a.label}
-                {a.confidence === "low" && <span className="ml-2 text-sm font-normal text-muted">few mentions</span>}
-              </span>
-              <span className="w-10 text-right font-semibold text-praise">{a.praise ? `▲${a.praise}` : ""}</span>
-              <span className="w-10 text-right font-semibold text-complaint">{a.complaints ? `▼${a.complaints}` : ""}</span>
-              <span aria-hidden="true" className="hidden h-2.5 w-[30%] md:flex">
-                <span className="bg-praise" style={{ width: `${(a.praise / max) * 100}%` }} />
-                <span className="bg-complaint-bar" style={{ width: `${(a.complaints / max) * 100}%` }} />
-              </span>
-              <span aria-hidden="true" className="text-muted">›</span>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function Funnel({ funnel }: { funnel: Analysis["funnel"] }) {
-  const pct = (n: number) => `${funnel.collected ? (n / funnel.collected) * 100 : 0}%`;
-  const rows = [
-    { label: "Reviews collected", n: funnel.collected, bar: "bg-ink", note: "Everything on the product's Flipkart review pages." },
-    { label: "Set aside as suspicious", n: funnel.suspicious.count, bar: "bg-complaint", note: funnel.suspicious.reason },
-    { label: "About delivery, not the product", n: funnel.fulfillment.count, bar: "bg-muted", note: funnel.fulfillment.reason },
-    { label: "Product reviews analysed", n: funnel.analysed, bar: "bg-praise", note: "Everything on this page comes from these." },
+function StatTiles({ analysis }: { analysis: Analysis }) {
+  const { funnel, reviews } = analysis;
+  const product = reviews.filter((r) => r.group === "product");
+  const tiles = [
+    { n: funnel.analysed, of: funnel.collected, label: "analysed" },
+    { n: product.filter((r) => r.sentiment === "positive").length, of: funnel.analysed, label: "positive" },
+    { n: funnel.suspicious.count + funnel.fulfillment.count, of: funnel.collected, label: "set aside: suspicious or about delivery" },
+    { n: reviews.filter((r) => r.verified_purchase).length, of: funnel.collected, label: "from certified buyers" },
   ];
   return (
-    <section aria-labelledby="funnel" className="min-w-0 flex-[2_1_320px]">
-      <SectionTitle id="funnel">How we read {plural(funnel.collected, "review")}</SectionTitle>
-      <ol className="flex flex-col gap-3">
-        {rows.map((r) => (
-          <li key={r.label}>
-            <div className="flex justify-between gap-4">
-              <span>{r.label}</span>
-              <span className="font-semibold">{r.n}</span>
-            </div>
-            <div aria-hidden="true" className="mt-1 h-5 bg-wash">
-              <div className={`h-full ${r.bar}`} style={{ width: pct(r.n) }} />
-            </div>
-            <p className="mt-1 text-sm text-muted">{r.note}</p>
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
-}
-
-function ClaimList({ title, items, tone }: { title: string; items: Claim[]; tone: string }) {
-  if (!items.length) return null;
-  return (
-    <div className="min-w-0 flex-[1_1_320px]">
-      <h3 className={`mb-2 font-display text-xl font-bold uppercase ${tone}`}>{title}</h3>
-      <ul className="border-t border-line">
-        {items.map((c) => (
-          <li key={c.text} className="flex items-baseline justify-between gap-4 border-b border-line py-3">
-            <span className="text-lg">{c.text}</span>
-            <span className="shrink-0 text-sm text-muted">{plural(c.review_ids.length, "review")}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function ReviewList({ reviews }: { reviews: Review[] }) {
-  const [group, setGroup] = useState<Review["group"]>("product");
-  const [all, setAll] = useState(false);
-  const shown = reviews.filter((r) => r.group === group);
-  return (
-    <section aria-labelledby="all-reviews" className="mt-12">
-      <SectionTitle id="all-reviews">The reviews</SectionTitle>
-      <div role="group" aria-label="Show reviews" className="mb-2 flex flex-wrap gap-2">
-        {(Object.keys(GROUP_LABEL) as Review["group"][]).map((g) => (
-          <button
-            key={g}
-            type="button"
-            aria-pressed={g === group}
-            onClick={() => {
-              setGroup(g);
-              setAll(false);
-            }}
-            className={`h-11 rounded-full border px-4 font-medium ${g === group ? "border-ink bg-ink text-white" : "border-line"}`}
-          >
-            {GROUP_LABEL[g]} {reviews.filter((r) => r.group === g).length}
-          </button>
-        ))}
-      </div>
-      <ul className="border-t border-line">
-        {(all ? shown : shown.slice(0, 6)).map((r) => (
-          <li key={r.review_id} className="border-b border-line py-4">
-            <p className="flex flex-wrap gap-x-3 text-sm text-muted">
-              <span className="tracking-wider text-ink" aria-label={`${r.rating} out of 5 stars`}>
-                {stars(r.rating)}
-              </span>
-              <span>{r.author}</span>
-              <span>{formatDate(r.review_date)}</span>
-              <span>{r.verified_purchase ? "Certified Buyer" : "Unverified"}</span>
-              {r.helpful_votes > 0 && <span>{r.helpful_votes} found helpful</span>}
+    <ul className="stagger mt-10 grid grid-cols-2 gap-4 md:grid-cols-4 md:gap-6">
+      {tiles.map((t) => {
+        const share = percent(t.n, t.of);
+        return (
+          <li data-reveal key={t.label} className="lift rounded-xl border border-line bg-paper p-4 hover:border-ink">
+            <p className="font-display text-3xl font-bold leading-none">
+              {share === null ? <><CountUp value={t.n} /> of {t.of}</> : <><CountUp value={share} />%</>}
             </p>
-            {r.title && <p className="mt-1 font-semibold">{r.title}</p>}
-            <p className="mt-1 max-w-[72ch]">{r.text}</p>
+            <p className="mt-1 text-sm font-semibold">{t.label}</p>
+            {share !== null && <p className="text-sm text-muted">{t.n} of {plural(t.of, "review")}</p>}
           </li>
-        ))}
-      </ul>
-      {!all && shown.length > 6 && (
-        <button type="button" onClick={() => setAll(true)} className="mt-4 h-11 rounded border border-ink px-5 font-semibold">
-          Show all {shown.length}
-        </button>
-      )}
-    </section>
+        );
+      })}
+    </ul>
   );
 }
 
-function AspectSheet({ aspect, reviews, onClose }: { aspect: Aspect | null; reviews: Map<string, Review>; onClose: () => void }) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    if (aspect) ref.current?.showModal();
-  }, [aspect]);
+function ClaimCard({ id, title, items, tone }: { id: string; title: string; items: Claim[]; tone: string }) {
   return (
-    <dialog
-      ref={ref}
-      aria-labelledby="sheet-title"
-      onClose={onClose}
-      onClick={(e) => e.target === ref.current && ref.current.close()}
-      className="mx-0 mb-0 mt-auto max-h-[85dvh] w-full max-w-none rounded-t-2xl bg-paper p-0 text-ink md:m-auto md:max-w-xl md:rounded-xl"
-    >
-      {aspect && (
-        <div className="p-5">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 id="sheet-title" className="text-2xl font-bold">
-                {aspect.label}
-              </h2>
-              <p className="text-muted">
-                <span className="font-semibold text-praise">▲ {aspect.praise} praise</span> ·{" "}
-                <span className="font-semibold text-complaint">▼ {plural(aspect.complaints, "complaint")}</span>
-                {aspect.mixed > 0 && ` · ${aspect.mixed} mixed`}
-              </p>
-            </div>
-            <form method="dialog">
-              <button aria-label="Close" className="size-11 text-2xl leading-none">
-                ×
-              </button>
-            </form>
-          </div>
-          <ul className="mt-4 flex flex-col gap-3">
-            {aspect.quotes.map((q) => {
-              const r = reviews.get(q.review_id);
-              return (
-                <li key={q.review_id} className="rounded-xl border border-line p-4">
-                  <p className={`text-sm font-semibold ${q.polarity === "complaint" ? "text-complaint" : q.polarity === "praise" ? "text-praise" : "text-muted"}`}>
-                    {q.polarity === "praise" ? "Praise" : q.polarity === "complaint" ? "Complaint" : "Mixed"}
-                  </p>
-                  <blockquote className="mt-1 text-lg">“{q.text}”</blockquote>
-                  {r && (
-                    <p className="mt-2 text-sm text-muted">
-                      {r.author} · {r.rating}★ · {formatDate(r.review_date)}
-                    </p>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-    </dialog>
+    <Card id={id} title={title}>
+      {!items.length && <p className="text-muted">Nothing stood out.</p>}
+      <ul data-chart className="stagger flex flex-col gap-3">
+        {items.map((c) => (
+          <li key={c.text} className={`chart-row border-l-4 pl-3 ${tone}`}>
+            <p className="text-lg text-ink">{c.text}</p>
+            <p className="text-sm text-muted">{plural(c.review_ids.length, "review")}</p>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+function SpecsCard({ specs }: { specs: SpecGroup[] }) {
+  return (
+    <Card id="specs" title="Specifications" note="As listed on Flipkart, not checked against reviews." className="mt-6">
+      {specs.map((group, i) => (
+        <details key={i} open={i === 0} className="border-t border-line py-3 first:border-t-0 first:pt-0">
+          <summary className="cursor-pointer font-semibold">
+            {group.name} <span className="text-sm font-normal text-muted">· {group.items.length}</span>
+          </summary>
+          <dl className="mt-3 grid gap-x-6 gap-y-2 md:grid-cols-[14rem_minmax(0,1fr)]">
+            {group.items.map((item, j) => (
+              <div key={j} className="md:contents">
+                <dt className="text-sm text-muted">{item.name}</dt>
+                <dd className="break-words">{item.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
+      ))}
+    </Card>
   );
 }
 
 export function Report({ analysis }: { analysis: Analysis }) {
   const [open, setOpen] = useState<Aspect | null>(null);
   const byId = new Map(analysis.reviews.map((r) => [r.review_id, r]));
+  const labels = new Map(analysis.aspects.map((a) => [a.key, a.label]));
+  const buckets = sentimentBuckets(analysis.reviews);
+  const timeline = hasTimeline(buckets);
+  const { product, funnel } = analysis;
+  const root = useReveal();
   return (
-    <main className="mx-auto max-w-6xl px-4 pb-20 pt-8 sm:px-6 md:pt-12">
-      <VerdictBlock analysis={analysis} />
-      <UseCases items={analysis.use_cases} />
-      <div className="mt-12 flex flex-wrap gap-12">
-        <AspectRows aspects={analysis.aspects} onOpen={setOpen} />
-        <Funnel funnel={analysis.funnel} />
-      </div>
-      {(analysis.pros.length > 0 || analysis.cons.length > 0) && (
-        <section aria-labelledby="worth-knowing" className="mt-12">
-          <SectionTitle id="worth-knowing">Worth knowing</SectionTitle>
-          <div className="flex flex-wrap gap-x-12 gap-y-8">
-            <ClaimList title="Good" items={analysis.pros} tone="text-praise" />
-            <ClaimList title="Not so good" items={analysis.cons} tone="text-complaint" />
+    <main ref={root} className="mx-auto max-w-6xl px-4 pb-20 pt-8 sm:px-6 md:pt-12">
+      {/* Flat on purpose: phones read title, photo, cards. The auto column collapses when there are no photos. */}
+      <div className="grid gap-y-6 hero:grid-cols-[minmax(0,1fr)_auto] hero:grid-rows-[auto_1fr]">
+        <header className="rise min-w-0">
+          <p className="text-sm text-muted">
+            {product.category} · {product.data_source === "live_scrape" ? `Collected ${product.collected_on}` : "Flipkart reviews"}
+          </p>
+          <h1 className="mt-1 font-display text-3xl font-bold capitalize leading-tight md:text-4xl">{product.name}</h1>
+        </header>
+        <ProductGallery images={product.images} name={product.name} />
+        <div className="@container min-w-0 hero:col-start-1">
+          <div className="stagger grid h-full grid-rows-[1fr_auto] gap-6 @2xl:grid-cols-5 @2xl:grid-rows-1">
+            <VerdictCard analysis={analysis} />
+            <RatingCard rating={analysis.rating} />
           </div>
-        </section>
-      )}
-      <ReviewList reviews={analysis.reviews} />
-      <p className="mt-12 text-sm text-muted">
-        Summary written {analysis.verdict.generated_by === "rule_based" ? "by rules from the review counts" : `by ${analysis.verdict.generated_by}`}.
-        Every quote is copied from a real review.
-      </p>
+        </div>
+      </div>
+      <StatTiles analysis={analysis} />
+      <Card id="mentions" title="What reviewers mention" note="Bars count the reviews that praise or complain about each feature. The percentage is the share of those that praise it, leaving out mixed reviews. Select a row to read them." className="mt-8">
+        <AspectChart aspects={analysis.aspects} onOpen={setOpen} />
+      </Card>
+      <div className="stagger mt-6 grid gap-6 md:grid-cols-2">
+        <Card id="funnel" title={`How we read ${plural(funnel.collected, "review")}`} className={timeline ? "" : "md:col-span-2"}>
+          <FunnelBar funnel={funnel} />
+        </Card>
+        {timeline && (
+          <Card id="over-time" title="Sentiment over time" note="Product reviews collected. Flipkart lists the most helpful first, so this is not every review.">
+            <SentimentTimeline buckets={buckets} />
+          </Card>
+        )}
+      </div>
+      <div className="stagger mt-6 grid gap-6 md:grid-cols-2">
+        <ClaimCard id="pros" title="What buyers like" items={analysis.pros} tone="border-praise" />
+        <ClaimCard id="cons" title="What buyers don’t like" items={analysis.cons} tone="border-complaint" />
+      </div>
+      {product.specs.length > 0 && <SpecsCard specs={product.specs} />}
+      <ReviewList reviews={analysis.reviews} labels={labels} />
       <AspectSheet aspect={open} reviews={byId} onClose={() => setOpen(null)} />
     </main>
   );

@@ -80,11 +80,23 @@ class AnalysisRequest(StrictModel):
         return self
 
 
+class SpecItem(StrictModel):
+    name: str
+    value: str
+
+
+class SpecGroup(StrictModel):
+    name: str
+    items: list[SpecItem]
+
+
 class Product(StrictModel):
     id: str
     name: str
     category: str
     source_url: str | None
+    images: list[str] = Field(max_length=12)
+    specs: list[SpecGroup]
     data_source: Literal["live_scrape", "catalogue"]
     collected_on: date | None
 

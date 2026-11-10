@@ -20,7 +20,10 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 CACHE_PATH = Path(__file__).resolve().parent.parent / "data" / "cache.sqlite"
-LLM_TIMEOUT_SECONDS = 20.0
+LLM_TIMEOUT_SECONDS = 15.0  # a 20-review batch takes ~2 s on Groq; a provider failing slowly costs this once per job
+# Default reasoning made gpt-oss on Groq fail JSON mode (400 json_validate_failed) and Gemini time out.
+# shortcut: assumes reasoning models (gpt-oss, Gemini 2.5+); remove it if a *_MODEL is set to a non-reasoning model.
+REASONING_EFFORT = "low"
 
 # name -> (key env var, model env var, default model, OpenAI-compatible chat completions URL)
 PROVIDERS: dict[str, tuple[str, str, str, str]] = {
@@ -85,6 +88,7 @@ def _call_provider(provider: str, system: str, prompt: str, parse: Callable[[str
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
         "response_format": {"type": "json_object"},
         "temperature": 0.2,
+        "reasoning_effort": REASONING_EFFORT,
     }
     try:
         resp = httpx.post(url, json=body, headers={"Authorization": f"Bearer {api_key}"}, timeout=LLM_TIMEOUT_SECONDS)
@@ -102,10 +106,17 @@ def _call_provider(provider: str, system: str, prompt: str, parse: Callable[[str
     return result
 
 
-def ask(system: str, prompt: str, parse: Callable[[str, str], T | None]) -> T | None:
-    """First valid parsed answer from the provider chain, or None (callers then use their rule-based path)."""
+def ask(system: str, prompt: str, parse: Callable[[str, str], T | None], skip: set[str] | None = None) -> T | None:
+    """First valid parsed answer from the provider chain, or None (callers then use their rule-based path).
+
+    Pass the same `skip` set to related calls: a provider that fails is added and not tried again by them.
+    """
     order = os.getenv("LLM_PROVIDERS", "groq,gemini")
     for provider in (p.strip().lower() for p in order.split(",")):
-        if provider in PROVIDERS and (result := _call_provider(provider, system, prompt, parse)) is not None:
+        if provider not in PROVIDERS or (skip is not None and provider in skip):
+            continue
+        if (result := _call_provider(provider, system, prompt, parse)) is not None:
             return result
+        if skip is not None:
+            skip.add(provider)
     return None

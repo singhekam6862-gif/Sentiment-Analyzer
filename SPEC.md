@@ -15,7 +15,7 @@ Input: a product from the local catalogue, or a pasted Flipkart product link. Ou
 
 ### A.1 Rules every feature follows
 1. **Every claim links to evidence.** Aspect counts, use-case verdicts and pros/cons point to the reviews behind them. Quotes are verbatim substrings of real reviews.
-2. **Counts, not opaque scores.** "Battery: 3 praise, 2 complaints", never "Battery 62/100".
+2. **Percentages with their counts, not opaque scores.** "Battery: 78% positive, 14 praise, 4 complaints", never "Battery 62/100". Whole numbers, 0% or 100% only when exact, and counts alone when fewer than 10 reviews sit behind the number. Percentages are computed in the frontend from the counts the API sends.
 3. **Honest uncertainty.** Thin evidence is labelled (`confidence: low`, `too_few`), never hidden behind a neutral number.
 4. **Any product category.** Aspects come from the reviews. A category template (e.g. TWS earbuds) only seeds names and use cases; the LLM path finds aspects for anything.
 
@@ -45,21 +45,26 @@ Trust signals (each lowers the score): unverified purchase; same-day burst (≥ 
 - **Rule-based path** (no key, or every provider failed): category keyword lexicon + clause splitting + the Hinglish-aware clause scorer.
 - Aspect counts: `praise`, `complaints`, `mixed` = number of product reviews with that polarity for the aspect (one vote per review per aspect).
 - `confidence`: `high` ≥ 6 mentions, `medium` 4–5, `low` ≤ 3.
+- **Grade shown per aspect** (frontend only, from the counts): Good / Average / Poor with the use-case cutoffs of §A.6, "Too few" under 2 mentions. Counts stay next to it, plus the percent positive (praise ÷ praise + complaints, the same share the grade uses, so mixed is left out) from 10 such reviews up.
+- **Suggested aspect keys** for the LLM: the category template's keys, then the aspect names Flipkart itself shows as review filters on page 1 of a live scrape ("Battery", "Sound Quality" → `battery`, `sound_quality`). No extra requests.
+- The LLM path asks for low reasoning effort, and a provider that fails one batch is skipped for the job's remaining batches.
 - **Long-term reliability** is a built-in aspect: opinion units from reviews written after weeks/months of use (`after 3 months`, `6 months use`, `ab kharab ho gaya`, `stopped working`, …) that report a failure or degradation.
 
-### A.6 Use-case verdicts ("Is it good for…")
+### A.6 Use-case verdicts
+- Used for the rule-based verdict headline and returned by the API. The report page doesn't show them as cards, because they repeat the "What reviewers mention" rows.
 - Up to 6 use cases per product (earbuds: Music, Commuting, Gym and running, Office calls, Lasting a year, Gaming). Each maps to one or more aspects.
 - From the mapped opinion units: `praise_share = praise / (praise + complaints)`.
   `good` ≥ 0.75 · `okay` 0.40–0.75 · `poor` < 0.40 · `too_few` when fewer than 2 reviews mention it.
 - `reason` is one short sentence; `review_count` is the number of reviews it is based on.
-- A product whose category has no template and no LLM answer returns `use_cases: []`; the UI hides the section.
+- **No template** (any product whose name or category doesn't match one): the LLM chain picks up to 6 use-case names, each tied to exactly one aspect with ≥ 2 mentions. It never decides the verdict; the counts above do. Answers naming an unknown aspect, or repeating an aspect or name, are dropped.
+- A product with no template and no valid LLM answer returns `use_cases: []`; the rule-based headline then names aspects instead.
 
 ### A.7 Verdict, pros and cons
-- `verdict.headline`: one or two sentences ("Great for music and commuting at this price. Not for office calls, and it may not last a year.").
+- `verdict.headline`: short and backed by the counts. The LLM writes one sentence of about 14 words, and an answer over 18 words is rejected ("Good for music and commuting, weak on calls."). The rule-based fallback names at most the two good and two poor use cases with the most reviews.
 - `verdict.warning`: one sentence when long-term reliability has ≥ 2 complaints and no more praise than complaints; else `null`.
 - Up to 3 pros and 3 cons, each with the `review_ids` it came from.
 - Written by the LLM chain **from the aggregated opinion units**, not raw reviews. Deterministic fallback builds them from the top/bottom aspects. `generated_by` reports `groq`, `gemini` or `rule_based`.
-- LLM answers are cached in `backend/app/data/cache.sqlite`, keyed by a hash of prompt + model.
+- LLM answers are cached in `backend/app/data/cache.sqlite`, keyed by a hash of prompt + model. Whole finished analyses are saved there too (§C.3).
 
 ### A.8 Comparison
 Not in v3.0. Planned as a separate page that aligns two analyses' aspects in one table.
@@ -73,11 +78,12 @@ Sentiment Analyser/
 ├── SPEC.md                         # This contract (source of truth)
 ├── CLAUDE.md                       # Operational rules for coding agents
 ├── docs/REBUILD_PLAN.md            # Why v3, research, phases
-├── backend/                        # Python 3.11+ · FastAPI · Playwright · NLP & LLM
+├── backend/                        # Python 3.11+ · FastAPI · httpx · NLP & LLM
 │   ├── app/
 │   │   ├── main.py                 # FastAPI app + /api/v3 routes
 │   │   ├── schemas.py              # Pydantic models (mirror of Section C)
-│   │   ├── jobs.py                 # In-memory analysis jobs (background tasks)
+│   │   ├── jobs.py                 # Analysis jobs (background tasks)
+│   │   ├── store.py                # Saved finished analyses (SQLite, 7-day reuse)
 │   │   ├── catalogue.py            # Local product catalogue (seed_reviews.json)
 │   │   ├── scraper/                # Flipkart fetch + parse, snapshots for tests
 │   │   ├── nlp/
@@ -90,10 +96,11 @@ Sentiment Analyser/
 │   │   │   ├── summarizer.py       # Verdict/pros/cons prompt (LLM) — rule-based fallback lives in analysis.py
 │   │   │   └── analysis.py         # Pipeline orchestrator → Analysis (Section C)
 │   │   └── data/seed_reviews.json  # Offline catalogue
+│   ├── eval/                       # Accuracy harness: gold.jsonl + `python -m eval` (see eval/README.md)
 │   └── tests/
 └── frontend/                       # Next.js (App Router) · TypeScript · Tailwind CSS
     ├── src/app/                    # / (search + catalogue), /analysis/[jobId]
-    ├── src/components/             # Verdict, use cases, aspects, funnel, reviews
+    ├── src/components/             # Verdict, aspects, funnel, reviews
     ├── src/lib/api.ts              # Typed fetch client + job polling
     └── src/types/analysis.ts       # TS types mirroring Section C
 ```
@@ -123,7 +130,9 @@ Returns `202` with an `AnalysisJob` (C.4). Errors: `422` (neither/both fields, a
 Load limits: at most 2 live scrapes run at once (further URL jobs wait in `fetching`), and the server keeps at most 200 jobs, dropping the oldest finished one to make room.
 
 ### C.3 `GET /api/v3/analyses/{job_id}`
-Returns the `AnalysisJob`. `404` when the job id is unknown (jobs live in memory and vanish on restart).
+Returns the `AnalysisJob`. `404` when the job id is unknown, or its saved result is more than 7 days old.
+
+Every `done` job is saved in `backend/app/data/cache.sqlite` (table `analyses`) and reused for 7 days: re-posting the same product, or opening its link after a restart, returns the saved job without scraping or calling an LLM. Running and failed jobs are not saved, nor a URL job that fell back to the catalogue (its next attempt tries Flipkart again).
 
 ### C.4 `AnalysisJob`
 
@@ -139,7 +148,7 @@ Returns the `AnalysisJob`. `404` when the job id is unknown (jobs live in memory
 
 | Field | Type | Notes |
 |---|---|---|
-| `job_id` | string | Catalogue jobs use the product id; URL jobs use a hash of the URL. Re-posting the same source returns the same job. |
+| `job_id` | string | Catalogue jobs use the product id; URL jobs use a hash of the link's path and `pid`, so tracking parameters don't make a new job. Re-posting the same source returns the same job. |
 | `status` | `queued` \| `fetching` \| `analysing` \| `done` \| `failed` | |
 | `message` | string | Human progress line for the UI ("Fetching reviews (2/5 pages)") |
 | `result` | `Analysis` \| null | Non-null only when `done` |
@@ -154,11 +163,13 @@ Returns the `AnalysisJob`. `404` when the job id is unknown (jobs live in memory
     "name": "realme Buds T310",
     "category": "TWS earbuds",
     "source_url": null,
+    "images": [],
+    "specs": [],
     "data_source": "catalogue",
     "collected_on": null
   },
   "verdict": {
-    "headline": "Great for music and commuting at this price. Not for office calls, and it may not last a year.",
+    "headline": "Good for music and commuting, weak on calls.",
     "warning": "4 owners say a part failed after 2–6 months.",
     "generated_by": "rule_based"
   },
@@ -206,6 +217,9 @@ Returns the `AnalysisJob`. `404` when the job id is unknown (jobs live in memory
 
 | Path | Type | Constraint |
 |---|---|---|
+| `product.name` | string | Live scrapes: short name, at most 7 words, every word taken from Flipkart's title (LLM, else the title's first 5 words) |
+| `product.images` | string[] | 0–12 `https://rukminim*.flixcart.com` product photos in Flipkart's gallery order, no videos. Falls back to the page's single `og:image`. Empty for catalogue products or when the product page gave none |
+| `product.specs` | `{ name, items: { name, value }[] }[]` | Flipkart's specification table, in its groups and order, copied as listed. Empty for catalogue products or when the product page gave none |
 | `product.data_source` | `live_scrape` \| `catalogue` | |
 | `product.collected_on` | date \| null | Date of a live scrape |
 | `verdict.generated_by` | `groq` \| `gemini` \| `rule_based` | |
@@ -238,10 +252,11 @@ POST /api/v3/analyses
    │
    ├─ product_id ──► catalogue reviews ──► analysing ──► done
    │
-   └─ url ──► job already done or running? ──yes──► return it
+   └─ url ──► job running, done, or saved < 7 days ago? ──yes──► return it
                 │ no
                 ▼
-            fetching: Flipkart review pages (≤ 50 reviews, ≤ 8 pages, 1–2 s jitter, ≤ 90 s total)
+            fetching: Flipkart review pages (≤ 50 reviews, ≤ 8 pages, 1–2 s jitter),
+                      then 1 product page for title, images and specs if any review was read (≤ 90 s total)
                 │
      ┌──────────┼──────────────────────────────┐
      │ ≥ 1 review│ CAPTCHA / block / timeout / 0 reviews
@@ -254,8 +269,10 @@ POST /api/v3/analyses
 
 ### D.3 Anti-block rules
 - **CAPTCHA detection = immediate abort** ("Are you a human?", "Access to this page has been denied", blocked pages). Never retry, solve or bypass.
+- **Plain HTTP, no browser:** one httpx client per crawl (IPv4, Chrome User-Agent). Reviews are read from the JSON Flipkart embeds in each page (`window.__INITIAL_STATE__`); the HTML card parser is the fallback when a page has none. HTTP 403/429 counts as a block.
 - **No retry loops.** One live attempt per job; a failed URL job can be re-posted by the user, not automatically.
 - **Bounded crawl:** stops as soon as 50 unique reviews are read (extra reviews on the last page are dropped). Max 8 review pages (`/product-reviews/…&page=N`, 10 reviews each, spare pages cover duplicates), 1–2 s jitter between pages. Stops early at the first page that adds no new reviews. The 90 s budget is only a safety net for a stalled page; a normal crawl ends at 50 reviews well before it.
+- **One product page:** after a crawl that read at least one review, one request to the product page reads its title, images and specs (review pages carry none of them), same client, jitter and budget. It's skipped when the budget is nearly spent. Any failure there, a block included, costs only those details: the reviews are kept and nothing is retried.
 - **`FORCE_FALLBACK=1`** disables live collection entirely (demos, CI): URL jobs go straight to the catalogue check.
 - **Never scrape Amazon.**
 

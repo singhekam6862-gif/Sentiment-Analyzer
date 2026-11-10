@@ -1,65 +1,28 @@
-"use client";
-
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { startAnalysis } from "@/lib/api";
+import { AnalyseForm } from "@/components/AnalyseForm";
+import { ThemeSwitch } from "@/components/ThemeSwitch";
 
 export function SiteHeader() {
-  const router = useRouter();
-  const [url, setUrl] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const job = await startAnalysis({ url: url.trim() });
-      setUrl("");
-      router.push(`/analysis/${job.job_id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start the analysis");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
-    <header className="bg-ink text-white">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3 sm:px-6">
-        <Link href="/" className="font-display text-2xl font-bold uppercase tracking-wide">
+    // See-through only over content: at the top of the page there's nothing under it, so it blurs once you scroll.
+    <header className="sticky top-0 z-40 border-b border-line bg-masthead/80 text-on-masthead backdrop-blur-md backdrop-saturate-150 print:static">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-3 px-4 py-3 sm:gap-x-6 sm:px-6">
+        <Link href="/" className="flex items-center gap-1.5 font-display text-base font-bold uppercase tracking-wide text-brand sm:gap-2 sm:text-2xl">
+          {/* Same drawing as app/icon.svg, in theme colours */}
+          <svg aria-hidden="true" viewBox="0 0 32 32" className="size-6 shrink-0 sm:size-7">
+            <rect width="32" height="32" rx="7" className="fill-selected" />
+            <path d="M9 6h14a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4h-9l-5 5v-5a4 4 0 0 1-4-4v-8a4 4 0 0 1 4-4z" className="fill-on-selected" />
+            <path d="M10.5 14l4 4 7-7.5" fill="none" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="stroke-selected" />
+          </svg>
           Review Analyser
         </Link>
-        <form onSubmit={submit} className="ml-auto flex w-full max-w-xl flex-col sm:w-auto sm:flex-1">
-          <div className="flex">
-            <label htmlFor="flipkart-url" className="sr-only">
-              Flipkart product link
-            </label>
-            <input
-              id="flipkart-url"
-              type="url"
-              required
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="Paste a Flipkart product link"
-              className="h-11 min-w-0 flex-1 rounded-l bg-white px-3 text-base text-ink placeholder:text-muted"
-            />
-            <button
-              type="submit"
-              disabled={busy}
-              className="h-11 rounded-r bg-accent px-5 font-semibold text-ink disabled:opacity-60"
-            >
-              {busy ? "Starting…" : "Analyse"}
-            </button>
-          </div>
-          {error && (
-            <p role="alert" className="mt-1 text-sm text-amber-200">
-              {error}
-            </p>
-          )}
-        </form>
+        {/* Hidden on the home page, which has the large link box ([data-home]); CSS, so the layout stays static. */}
+        <div className="order-last w-full sm:order-none sm:w-auto sm:max-w-xl sm:flex-1 [body:has([data-home])_&]:hidden">
+          <AnalyseForm />
+        </div>
+        <div className="ml-auto">
+          <ThemeSwitch />
+        </div>
       </div>
     </header>
   );

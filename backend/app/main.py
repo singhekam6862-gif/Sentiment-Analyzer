@@ -34,7 +34,7 @@ def start_analysis(req: AnalysisRequest, background: BackgroundTasks) -> Analysi
 
 @app.get("/api/v3/analyses/{job_id}", response_model=AnalysisJob)
 def get_analysis(job_id: str) -> AnalysisJob:
-    job = jobs.JOBS.get(job_id)
+    job = jobs.get(job_id)
     if job is None:
         raise HTTPException(404, "This analysis has expired or never existed. Start it again.")
     return job
