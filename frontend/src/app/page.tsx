@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AnalyseForm } from "@/components/AnalyseForm";
-import { listProducts } from "@/lib/api";
+import { listProducts, listRecent } from "@/lib/api";
+import { plural } from "@/lib/format";
 import type { CatalogueProduct } from "@/types/analysis";
 
 const STEPS = [
@@ -14,10 +15,17 @@ const STEPS = [
 
 export default function HomePage() {
   const [products, setProducts] = useState<CatalogueProduct[] | null>(null);
+  const [recent, setRecent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Recent analyses first; the catalogue only when nothing was analysed this week.
   useEffect(() => {
-    listProducts().then(setProducts, (err: Error) => setError(err.message));
+    listRecent()
+      .then((items) => {
+        setRecent(items.length > 0);
+        return items.length ? items : listProducts();
+      })
+      .then(setProducts, (err: Error) => setError(err.message));
   }, []);
 
   return (
@@ -45,10 +53,12 @@ export default function HomePage() {
         ))}
       </ol>
 
-      <h2 className="mt-14 font-display text-2xl font-bold uppercase tracking-wide">Or try a product we already collected</h2>
+      <h2 className="mt-14 font-display text-2xl font-bold uppercase tracking-wide">
+        {recent ? "Recently analysed" : "Or try a product we already collected"}
+      </h2>
       {error && (
         <p role="alert" className="rise mt-4 text-complaint">
-          Could not load the catalogue: {error}. Is the backend running?
+          Could not load the products: {error}. Is the backend running?
         </p>
       )}
       {!products && !error && <p className="mt-4 text-muted">Loading products…</p>}
@@ -62,7 +72,7 @@ export default function HomePage() {
               <span className="text-sm text-muted">{p.category}</span>
               <span className="mt-1 text-lg font-semibold">{p.name}</span>
               <span className="mt-auto pt-4 text-sm font-semibold">
-                {p.review_count} reviews · <span className="underline underline-offset-4">See the analysis</span>
+                {plural(p.review_count, "review")} · <span className="underline underline-offset-4">See the analysis</span>
               </span>
             </Link>
           </li>

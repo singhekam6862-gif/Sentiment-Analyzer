@@ -31,7 +31,7 @@ export function AnalyseForm({ large = false }: { large?: boolean }) {
   return (
     <form onSubmit={submit} className="flex w-full flex-col">
       {/* overflow-hidden would clip an outside focus ring, so both controls draw theirs inside */}
-      <div className={`flex overflow-hidden rounded-lg border-field ${large ? "border-2" : "border"}`}>
+      <div className={`flex overflow-hidden rounded-lg border-field bg-paper ${large ? "border-2" : "border"}`}>
         <label htmlFor={id} className="sr-only">
           Flipkart product link
         </label>
@@ -47,7 +47,8 @@ export function AnalyseForm({ large = false }: { large?: boolean }) {
         <button
           type="submit"
           disabled={busy}
-          className={`${height} shrink-0 bg-paper px-5 font-semibold text-ink underline-offset-4 outline-ink -outline-offset-4 hover:underline disabled:opacity-60`}
+          // Inset 4px so the filled button sits inside the field's border; its height is the field's minus that inset.
+          className={`${large ? "h-12 px-7 text-lg" : "h-9 px-5 text-base"} m-1 shrink-0 rounded-md bg-selected font-semibold text-on-selected outline-on-selected -outline-offset-4 hover:opacity-90 disabled:opacity-60`}
         >
           {busy ? "Starting…" : "Analyse"}
         </button>

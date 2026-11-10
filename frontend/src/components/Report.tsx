@@ -156,7 +156,7 @@ export function Report({ analysis }: { analysis: Analysis }) {
       <div className="grid gap-y-6 hero:grid-cols-[minmax(0,1fr)_auto] hero:grid-rows-[auto_1fr]">
         <header className="rise min-w-0">
           <p className="text-sm text-muted">
-            {product.category} · {product.data_source === "live_scrape" ? `Collected ${product.collected_on}` : "Flipkart reviews"}
+            {product.category} · {product.collected_on ? `Collected ${product.collected_on}` : "Flipkart reviews"}
           </p>
           <h1 className="mt-1 font-display text-3xl font-bold capitalize leading-tight md:text-4xl">{product.name}</h1>
         </header>

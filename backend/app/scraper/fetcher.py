@@ -1,7 +1,6 @@
 import asyncio
 from collections.abc import Callable
 import logging
-import os
 
 from app.schemas import RawReview, SpecGroup
 from app.scraper.flipkart import ScrapeBlockedError, scrape_flipkart_url
@@ -11,6 +10,8 @@ logger = logging.getLogger(__name__)
 LIVE_BUDGET_SECONDS = 90.0  # safety net for a stalled page (SPEC §D.1); the crawl normally ends at 50 reviews first
 LIVE_SCRAPE_SLOTS = 2  # SPEC §C.2: more URL jobs wait here, so the server never hits Flipkart from many crawls at once
 _live_slots = asyncio.Semaphore(LIVE_SCRAPE_SLOTS)
+# Set only by app.demo, never from the environment, so a stale shell variable can't switch the live server off.
+DEMO_MODE = False
 
 
 async def fetch_url_reviews(
@@ -18,7 +19,7 @@ async def fetch_url_reviews(
 ) -> tuple[list[RawReview], list[str], str | None, list[str], list[SpecGroup]]:
     """One live attempt within the budget: (reviews, Flipkart aspect names, title, image URLs, specs).
     ([], [], None, [], []) on block, timeout or any error; never raises."""
-    if os.getenv("FORCE_FALLBACK", "0") == "1":
+    if DEMO_MODE:
         return [], [], None, [], []
     try:
         async with _live_slots:  # waiting for a slot doesn't count against the budget

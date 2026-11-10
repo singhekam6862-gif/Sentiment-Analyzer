@@ -385,9 +385,19 @@ def test_catalogue_lists_seed_products():
     assert catalogue.get_product("unknown-product") is None
 
 
+def test_catalogue_product_copied_from_a_live_scrape_keeps_its_photos_and_specs():
+    product, reviews, hints = jobs._catalogue_source("boat-airdopes-141-gen-2", None)
+    assert product.data_source == "catalogue" and product.collected_on is not None
+    assert product.images and product.specs and hints and len(reviews) >= 20
+    assert product.source_url.startswith("https://www.flipkart.com/")
+    # hand-written products stay bare
+    product, _, hints = jobs._catalogue_source("realme-buds-t310", None)
+    assert (product.images, product.specs, product.collected_on, hints) == ([], [], None, [])
+
+
 def test_catalogue_matches_flipkart_url_slug():
     assert catalogue.match_product("/realme-buds-t310-with-46db-anc/p/itm123") == "realme-buds-t310"
-    assert catalogue.match_product("/boat-airdopes-141/p/itm999") is None
+    assert catalogue.match_product("/noise-buds-vs104/p/itm999") is None
 
 
 @pytest.mark.asyncio
@@ -432,8 +442,8 @@ async def test_live_scrapes_are_capped(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_force_fallback_skips_live_scrape(monkeypatch):
-    monkeypatch.setenv("FORCE_FALLBACK", "1")
+async def test_demo_mode_skips_live_scrape(monkeypatch):
+    monkeypatch.setattr("app.scraper.fetcher.DEMO_MODE", True)
     with patch("app.scraper.fetcher.scrape_flipkart_url") as scraper:
         assert await fetch_url_reviews(URL) == ([], [], None, [], [])
     scraper.assert_not_called()

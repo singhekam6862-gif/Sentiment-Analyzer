@@ -37,10 +37,10 @@ uvicorn app.main:app --reload --env-file .env
 
 The API runs at http://127.0.0.1:8000 (interactive docs at http://127.0.0.1:8000/docs).
 
-Demo mode (catalogue products only, never fetches Flipkart) runs on its own port, 8001, so it can run next to the live backend:
+Demo mode (catalogue products only, never fetches Flipkart) is a separate app, `app.demo`, on its own port, 8001, so it can run next to the live backend. `app.main` is always live; no environment variable can switch it off:
 
 ```bash
-FORCE_FALLBACK=1 uvicorn app.main:app --reload --port 8001    # PowerShell: $env:FORCE_FALLBACK=1; uvicorn app.main:app --reload --port 8001
+uvicorn app.demo:app --reload --port 8001
 ```
 
 ### 2. Frontend (terminal 2)
@@ -65,7 +65,6 @@ All settings are optional.
 | `GEMINI_API_KEY` | Free key from https://aistudio.google.com/apikey. Used if Groq is missing or fails. |
 | `LLM_PROVIDERS` | Order the providers are tried in (default `groq,gemini`). |
 | `GROQ_MODEL` / `GEMINI_MODEL` | Override the model id if a provider retires the default. |
-| `FORCE_FALLBACK` | `0` (default): fetch reviews live from Flipkart. `1`: demo mode, catalogue products only. |
 
 Without any API key, summaries use a built-in rule-based fallback, so the app still works.
 
@@ -73,7 +72,7 @@ Without any API key, summaries use a built-in rule-based fallback, so the app st
 
 - **Catalogue products** (listed on the home page) are bundled with the repo and always work, even offline.
 - **Any other Flipkart link** is fetched live in the background: one attempt, up to 50 reviews (at most 8 review pages, 90-second safety limit). If Flipkart shows a CAPTCHA or blocks the request (HTTP 403/429), the analysis fails with an error instead of retrying. Try again later or pick a catalogue product.
-- If you see *"Live fetching is switched off on this server (demo mode)"*, the backend was started with `FORCE_FALLBACK=1`. Restart it with `--env-file .env` and `FORCE_FALLBACK=0`.
+- If you see *"Live fetching is switched off on this server (demo mode)"*, the frontend is talking to the demo backend (`app.demo`). Point it at the live one on port 8000: remove `NEXT_PUBLIC_API_URL` from `frontend/.env.local`, or set it to `http://127.0.0.1:8000`.
 
 ## Tests and checks
 

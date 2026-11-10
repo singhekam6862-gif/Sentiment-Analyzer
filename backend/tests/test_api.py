@@ -3,12 +3,13 @@ from fastapi.testclient import TestClient
 
 from app import jobs, store
 from app.main import app
+from app.scraper import fetcher
 from app.schemas import Analysis, AnalysisRequest
 
 
 @pytest.fixture
 def client(monkeypatch):
-    monkeypatch.setenv("FORCE_FALLBACK", "1")  # URL jobs never go live in tests
+    monkeypatch.setattr(fetcher, "DEMO_MODE", True)  # URL jobs never go live in tests
     jobs.JOBS.clear()
     return TestClient(app)
 
@@ -48,7 +49,7 @@ def test_url_job_falls_back_to_matching_catalogue_product(client):
 
 
 def test_url_job_without_reviews_fails_with_a_reason(client):
-    job_id = client.post("/api/v3/analyses", json={"url": "https://www.flipkart.com/boat-airdopes-141/p/itm9"}).json()["job_id"]
+    job_id = client.post("/api/v3/analyses", json={"url": "https://www.flipkart.com/noise-buds-vs104/p/itm9"}).json()["job_id"]
     job = client.get(f"/api/v3/analyses/{job_id}").json()
     assert job["status"] == "failed"
     assert "catalogue" in job["error"]
@@ -110,6 +111,15 @@ def test_saved_analysis_expires(client, monkeypatch):
     jobs.JOBS.clear()
     monkeypatch.setattr(store, "MAX_AGE_SECONDS", -1)
     assert client.get("/api/v3/analyses/realme-buds-t310").status_code == 404
+
+
+def test_recent_lists_newest_saved_analyses_first(client):
+    assert client.get("/api/v3/analyses").json() == []
+    client.post("/api/v3/analyses", json={"product_id": "realme-buds-t310"})
+    client.post("/api/v3/analyses", json={"product_id": "sony-wf-c700n"})
+    recent = client.get("/api/v3/analyses").json()
+    assert [r["id"] for r in recent] == ["sony-wf-c700n", "realme-buds-t310"]
+    assert recent[1] == {"id": "realme-buds-t310", "name": "realme Buds T310", "category": "TWS Earbuds", "review_count": 24}
 
 
 def test_same_product_link_with_other_tracking_params_is_one_job():

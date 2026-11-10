@@ -1,10 +1,26 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { type ReactNode, useEffect, useSyncExternalStore } from "react";
 
 type Choice = "system" | "light" | "dark";
 const CHOICES: Choice[] = ["system", "light", "dark"];
-const LABEL: Record<Choice, string> = { system: "Auto", light: "Light", dark: "Dark" };
+const LABEL: Record<Choice, string> = { system: "Auto (match device)", light: "Light", dark: "Dark" };
+// Functional symbols, not decoration: each button's name is in aria-label and its tooltip.
+const ICON: Record<Choice, ReactNode> = {
+  system: (
+    <>
+      <circle cx="10" cy="10" r="6.5" />
+      <path d="M10 3.5a6.5 6.5 0 0 1 0 13z" fill="currentColor" />
+    </>
+  ),
+  light: (
+    <>
+      <circle cx="10" cy="10" r="3.5" />
+      <path d="M10 1.5v2M10 16.5v2M1.5 10h2M16.5 10h2M4 4l1.4 1.4M14.6 14.6 16 16M4 16l1.4-1.4M14.6 5.4 16 4" />
+    </>
+  ),
+  dark: <path d="M16.5 12.3A7 7 0 0 1 7.7 3.5a7 7 0 1 0 8.8 8.8z" />,
+};
 const CHANGED = "themechoice";
 
 function apply(choice: Choice) {
@@ -72,12 +88,16 @@ export function ThemeSwitch() {
           key={c}
           type="button"
           aria-pressed={choice === c}
+          aria-label={LABEL[c]}
+          title={LABEL[c]}
           onClick={() => pick(c)}
-          className={`h-9 rounded-full px-2 font-medium sm:min-w-14 sm:px-3 ${
+          className={`grid size-9 place-items-center rounded-full ${
             choice === c ? "bg-selected text-on-selected" : "text-masthead-muted hover:text-on-masthead"
           }`}
         >
-          {LABEL[c]}
+          <svg aria-hidden="true" viewBox="0 0 20 20" className="theme-icon size-[18px]" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            {ICON[c]}
+          </svg>
         </button>
       ))}
     </div>
