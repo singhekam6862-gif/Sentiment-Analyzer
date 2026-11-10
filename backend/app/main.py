@@ -1,7 +1,7 @@
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from app import catalogue, jobs
+from app import catalogue, jobs, store
 from app.schemas import AnalysisJob, AnalysisRequest, CatalogueProduct
 
 app = FastAPI(
@@ -30,6 +30,11 @@ def start_analysis(req: AnalysisRequest, background: BackgroundTasks) -> Analysi
     if is_new:
         background.add_task(jobs.run, job.job_id, req)
     return job
+
+
+@app.get("/api/v3/analyses", response_model=list[CatalogueProduct])
+def recent_analyses() -> list[CatalogueProduct]:
+    return store.recent()
 
 
 @app.get("/api/v3/analyses/{job_id}", response_model=AnalysisJob)

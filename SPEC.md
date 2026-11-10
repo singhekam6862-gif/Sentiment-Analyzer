@@ -129,6 +129,13 @@ Returns `202` with an `AnalysisJob` (C.4). Errors: `422` (neither/both fields, a
 
 Load limits: at most 2 live scrapes run at once (further URL jobs wait in `fetching`), and the server keeps at most 200 jobs, dropping the oldest finished one to make room.
 
+### C.2a `GET /api/v3/analyses`
+The 6 most recently saved analyses (C.3), newest first, one per product name, in the C.1 card shape. `id` is the `job_id` to open, `review_count` is `funnel.collected`. Empty when nothing was saved in the last 7 days. The home page shows these, or the catalogue when the list is empty.
+
+```json
+[{ "id": "3f9c2a1b7d4e", "name": "Motorola MotoBook 60", "category": "Laptops", "review_count": 50 }]
+```
+
 ### C.3 `GET /api/v3/analyses/{job_id}`
 Returns the `AnalysisJob`. `404` when the job id is unknown, or its saved result is more than 7 days old.
 
@@ -218,10 +225,10 @@ Every `done` job is saved in `backend/app/data/cache.sqlite` (table `analyses`) 
 | Path | Type | Constraint |
 |---|---|---|
 | `product.name` | string | Live scrapes: short name, at most 7 words, every word taken from Flipkart's title (LLM, else the title's first 5 words) |
-| `product.images` | string[] | 0–12 `https://rukminim*.flixcart.com` product photos in Flipkart's gallery order, no videos. Falls back to the page's single `og:image`. Empty for catalogue products or when the product page gave none |
-| `product.specs` | `{ name, items: { name, value }[] }[]` | Flipkart's specification table, in its groups and order, copied as listed. Empty for catalogue products or when the product page gave none |
+| `product.images` | string[] | 0–12 `https://rukminim*.flixcart.com` product photos in Flipkart's gallery order, no videos. Falls back to the page's single `og:image`. Catalogue products have them only if copied from a live scrape; otherwise empty, as when the product page gave none |
+| `product.specs` | `{ name, items: { name, value }[] }[]` | Flipkart's specification table, in its groups and order, copied as listed. Catalogue products have them only if copied from a live scrape; otherwise empty, as when the product page gave none |
 | `product.data_source` | `live_scrape` \| `catalogue` | |
-| `product.collected_on` | date \| null | Date of a live scrape |
+| `product.collected_on` | date \| null | Date of the live scrape, including one a catalogue product was copied from |
 | `verdict.generated_by` | `groq` \| `gemini` \| `rule_based` | |
 | `rating.average` | number | 0–5, one decimal, over **all** collected reviews (what Flipkart shows) |
 | `rating.distribution` | int[5] | Counts for 1★…5★, index 0 = 1★ |
@@ -273,7 +280,7 @@ POST /api/v3/analyses
 - **No retry loops.** One live attempt per job; a failed URL job can be re-posted by the user, not automatically.
 - **Bounded crawl:** stops as soon as 50 unique reviews are read (extra reviews on the last page are dropped). Max 8 review pages (`/product-reviews/…&page=N`, 10 reviews each, spare pages cover duplicates), 1–2 s jitter between pages. Stops early at the first page that adds no new reviews. The 90 s budget is only a safety net for a stalled page; a normal crawl ends at 50 reviews well before it.
 - **One product page:** after a crawl that read at least one review, one request to the product page reads its title, images and specs (review pages carry none of them), same client, jitter and budget. It's skipped when the budget is nearly spent. Any failure there, a block included, costs only those details: the reviews are kept and nothing is retried.
-- **`FORCE_FALLBACK=1`** disables live collection entirely (demos, CI): URL jobs go straight to the catalogue check.
+- **Demo mode** (`uvicorn app.demo:app`, port 8001) disables live collection entirely (demos, CI): URL jobs go straight to the catalogue check. It is a separate entry point, not an environment variable, so the live app (`app.main`, port 8000) can't be switched off by a stale shell setting.
 - **Never scrape Amazon.**
 
 ### D.4 `seed_reviews.json` shape
@@ -303,3 +310,5 @@ POST /api/v3/analyses
 ```
 
 Catalogue ids are the keys slugified (`realme buds t310` → `realme-buds-t310`).
+
+Products copied from a finished live scrape (for demos with real photos) add optional metadata: `source_url`, `images`, `specs`, `collected_on` and `aspect_hints` (Flipkart's aspect names, passed to the LLM as for a live job), plus `"in_eval": false`, which keeps their unlabelled reviews out of `python -m eval`.

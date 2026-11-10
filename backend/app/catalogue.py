@@ -48,6 +48,12 @@ def get_product(product_id: str) -> tuple[CatalogueProduct, list[RawReview]] | N
     return product, [RawReview.model_validate(r) for r in entry.get("reviews", [])]
 
 
+def metadata(product_id: str) -> dict:
+    """The entry's metadata. Products copied from a live scrape also carry images, specs, source_url,
+    collected_on and aspect_hints; hand-written ones don't."""
+    return _load().get(product_id, {}).get("metadata", {})
+
+
 def match_product(text: str) -> str | None:
     """Catalogue id sharing the most words with `text` (e.g. a Flipkart URL slug), needing at least 2."""
     words = set(slugify(text).split("-"))

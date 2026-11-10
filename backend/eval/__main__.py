@@ -31,8 +31,10 @@ def load_gold() -> dict[str, dict]:
 
 
 def load_reviews() -> dict[str, list[RawReview]]:
-    """Seed reviews per catalogue product (the trust scorer needs each product's reviews together)."""
-    return {p.id: catalogue.get_product(p.id)[1] for p in catalogue.list_products()}
+    """Seed reviews per gold-labelled catalogue product (the trust scorer needs each product's reviews together).
+    Products copied from live scrapes are marked in_eval: false, since nobody hand-labelled them."""
+    return {p.id: catalogue.get_product(p.id)[1] for p in catalogue.list_products()
+            if catalogue.metadata(p.id).get("in_eval", True)}
 
 
 def star_baseline(rating: int) -> str:

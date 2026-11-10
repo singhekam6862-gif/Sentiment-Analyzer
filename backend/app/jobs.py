@@ -4,7 +4,6 @@ Running jobs live in this process; finished ones are also saved to SQLite (app.s
 """
 
 import asyncio
-import os
 from datetime import date
 import hashlib
 import logging
@@ -14,6 +13,7 @@ from app import catalogue, store
 from app.nlp.analysis import analyse
 from app.nlp.summarizer import short_product_name
 from app.schemas import AnalysisJob, AnalysisRequest, Product, RawReview
+from app.scraper import fetcher
 from app.scraper.fetcher import fetch_url_reviews
 
 logger = logging.getLogger(__name__)
@@ -82,9 +82,11 @@ Source = tuple[Product, list[RawReview], list[str]]  # product, reviews, Flipkar
 
 def _catalogue_source(product_id: str, source_url: str | None) -> Source:
     item, reviews = catalogue.get_product(product_id)
-    product = Product(id=item.id, name=item.name, category=item.category, source_url=source_url, images=[], specs=[],
-                      data_source="catalogue", collected_on=None)
-    return product, reviews, []
+    meta = catalogue.metadata(product_id)
+    product = Product(id=item.id, name=item.name, category=item.category, source_url=source_url or meta.get("source_url"),
+                      images=meta.get("images", []), specs=meta.get("specs", []), data_source="catalogue",
+                      collected_on=meta.get("collected_on"))
+    return product, reviews, meta.get("aspect_hints", [])
 
 
 async def _url_source(job_id: str, url: str) -> Source | None:
@@ -105,7 +107,7 @@ async def run(job_id: str, req: AnalysisRequest) -> None:
     try:
         source = _catalogue_source(req.product_id, None) if req.product_id else await _url_source(job_id, req.url)
         if source is None:
-            reason = LIVE_OFF if os.getenv("FORCE_FALLBACK", "0") == "1" else NO_REVIEWS
+            reason = LIVE_OFF if fetcher.DEMO_MODE else NO_REVIEWS
             _set(job_id, status="failed", message="No reviews collected", error=reason)
             return
         product, reviews, aspect_hints = source

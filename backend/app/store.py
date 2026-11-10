@@ -12,7 +12,7 @@ import time
 
 from pydantic import ValidationError
 
-from app.schemas import AnalysisJob
+from app.schemas import AnalysisJob, CatalogueProduct
 
 logger = logging.getLogger(__name__)
 
@@ -45,3 +45,27 @@ def load(job_id: str) -> AnalysisJob | None:
     except (sqlite3.Error, ValidationError) as exc:  # a row from an older schema counts as a miss
         logger.warning("Loading analysis %s failed: %s", job_id, exc)
         return None
+
+
+def recent(limit: int = 6) -> list[CatalogueProduct]:
+    """The newest saved analyses, one per product name, as cards linking to /analysis/{job_id}."""
+    try:
+        with closing(_open()) as conn:
+            rows = conn.execute(
+                "SELECT job FROM analyses WHERE saved_at > ? ORDER BY saved_at DESC LIMIT ?",
+                (time.time() - MAX_AGE_SECONDS, limit * 3),  # spare rows for a product saved under two job ids
+            ).fetchall()
+    except sqlite3.Error as exc:
+        logger.warning("Listing saved analyses failed: %s", exc)
+        return []
+    cards: dict[str, CatalogueProduct] = {}
+    for (raw,) in rows:
+        try:
+            job = AnalysisJob.model_validate_json(raw)
+        except ValidationError:
+            continue  # a row from an older schema
+        product = job.result.product
+        cards.setdefault(product.name, CatalogueProduct(
+            id=job.job_id, name=product.name, category=product.category, review_count=job.result.funnel.collected
+        ))
+    return list(cards.values())[:limit]

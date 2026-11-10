@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* On the home page. Next keeps the page you left mounted but hidden (inline display: none), so a hidden home page must not count. */
+@custom-variant on-home (body:has(> [data-home]:not([style*="display: none"])) &);
+
 /* Mockup C (desktop) + E (phone). Light and dark share these names; [data-theme] on <html> picks the values.
    Chart colours checked with the dataviz validator: praise/complaint pass CVD and contrast on both card surfaces;
    neutral is the grey midpoint of the positive/neutral/negative scale (>= 3:1 on the card). */
@@ -10,7 +13,7 @@
   --color-ink: #111111;
   --color-muted: #444444;
   --color-line: #111111;
-  --color-wash: #f2f2f2;
+  --color-wash: #f3f0fa;
   --color-selected: #37006e;
   --color-on-selected: #ffffff;
   --color-brand: #00009f;
@@ -21,7 +24,7 @@
   --color-on-masthead: #111111;
   --color-masthead-muted: #444444;
   --color-masthead-warn: #c2410c;
-  --color-verdict: #e8e8e4;
+  --color-verdict: #ebe6f7;
   --color-on-verdict: #111111;
   --color-verdict-muted: #444444;
   --color-verdict-warn: #a8380a;
@@ -42,32 +45,33 @@
   color-scheme: light;
 }
 
-/* Light's outlined look on charcoal: visible grey outlines, a lifted verdict, and lavender for what's selected. */
+/* Night violet, not grey: every neutral carries the brand hue, and surfaces step lighter as they rise
+   (page < card < wash < verdict), the way dark UIs show elevation without shadows. Lavender marks what's selected. */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --color-page: #121212;
-  --color-paper: #191919;
-  --color-ink: #ededed;
-  --color-muted: #a3a3a3;
-  --color-line: #525252;
-  --color-wash: #262626;
+  --color-page: #0c0a14;
+  --color-paper: #15121f;
+  --color-ink: #ece9f6;
+  --color-muted: #a49fbd;
+  --color-line: #342e4a;
+  --color-wash: #211c33;
   --color-selected: #c4b5fd;
   --color-on-selected: #1e0a45;
-  --color-brand: #a5b4fc;
+  --color-brand: #b8a7ff;
   --color-praise: #4f8df5;
   --color-complaint: #dc6a22;
-  --color-neutral: #737373;
-  --color-masthead: #121212;
+  --color-neutral: #78728f;
+  --color-masthead: #0c0a14;
   --color-on-masthead: #ffffff;
-  --color-masthead-muted: #a3a3a3;
+  --color-masthead-muted: #a49fbd;
   --color-masthead-warn: #fdba74;
-  --color-verdict: #2b2b2b;
-  --color-on-verdict: #ededed;
-  --color-verdict-muted: #b5b5b5;
+  --color-verdict: #221c3a;
+  --color-on-verdict: #f1eefb;
+  --color-verdict-muted: #bab3d6;
   --color-verdict-warn: #fdba74;
-  --color-verdict-line: #6b6b6b;
-  --color-data: #c2c2c2;
-  --color-field: #6b6b6b;
+  --color-verdict-line: #5a4f85;
+  --color-data: #c8c2e0;
+  --color-field: #6c6392;
 }
 
 /* Paper is always light: browsers drop backgrounds by default, so nothing may rely on a dark fill behind light text. */
@@ -148,6 +152,15 @@ button {
     color 150ms ease,
     border-color 150ms ease,
     opacity 200ms ease;
+}
+
+.nav-back,
+.nav-back svg,
+.theme-icon {
+  transition:
+    transform 200ms var(--ease-out),
+    color 150ms ease,
+    border-color 150ms ease;
 }
 
 .lift {
@@ -280,6 +293,25 @@ button {
     transform: scale(0.97);
   }
 
+  .nav-back:active {
+    transform: scale(0.92);
+  }
+
+  /* The newly chosen theme's symbol turns into place, so the switch reads as a change, not just a recolour. */
+  [aria-pressed="true"] > .theme-icon {
+    animation: icon-in 450ms var(--ease-out);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .nav-back:hover svg {
+      transform: translateX(-3px);
+    }
+
+    [aria-pressed="false"]:hover > .theme-icon {
+      transform: scale(1.15) rotate(-12deg);
+    }
+  }
+
   @media (hover: hover) and (pointer: fine) {
     .lift:hover {
       transform: translateY(-4px);
@@ -334,6 +366,13 @@ button {
   from {
     opacity: 0;
     transform: scale(0.6);
+  }
+}
+
+@keyframes icon-in {
+  from {
+    opacity: 0;
+    transform: rotate(-90deg) scale(0.5);
   }
 }
 

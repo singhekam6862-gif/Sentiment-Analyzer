@@ -17,6 +17,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const listProducts = () => request<CatalogueProduct[]>("/api/v3/products");
 
+// Same card shape as the catalogue; id is the job id (SPEC §C.2a)
+export const listRecent = () => request<CatalogueProduct[]>("/api/v3/analyses");
+
 export const startAnalysis = (body: AnalysisRequest) =>
   request<AnalysisJob>("/api/v3/analyses", {
     method: "POST",
