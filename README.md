@@ -37,10 +37,10 @@ uvicorn app.main:app --reload --env-file .env
 
 The API runs at http://127.0.0.1:8000 (interactive docs at http://127.0.0.1:8000/docs).
 
-Demo mode (catalogue products only, never fetches Flipkart):
+Demo mode (catalogue products only, never fetches Flipkart) runs on its own port, 8001, so it can run next to the live backend:
 
 ```bash
-FORCE_FALLBACK=1 uvicorn app.main:app --reload    # PowerShell: $env:FORCE_FALLBACK=1; uvicorn app.main:app --reload
+FORCE_FALLBACK=1 uvicorn app.main:app --reload --port 8001    # PowerShell: $env:FORCE_FALLBACK=1; uvicorn app.main:app --reload --port 8001
 ```
 
 ### 2. Frontend (terminal 2)
@@ -53,7 +53,7 @@ npm run dev
 
 Open http://localhost:3000.
 
-The frontend talks to `http://127.0.0.1:8000` by default. If your backend runs elsewhere, set `NEXT_PUBLIC_API_URL` in `frontend/.env.local`.
+The frontend talks to the live backend at `http://127.0.0.1:8000` by default. To use the demo backend instead, set `NEXT_PUBLIC_API_URL=http://127.0.0.1:8001` in `frontend/.env.local` and restart `npm run dev`.
 
 ## Configuration (`backend/.env`)
 

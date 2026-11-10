@@ -4,9 +4,9 @@
     {
       "name": "backend-demo",
       "runtimeExecutable": "backend/.venv/Scripts/python.exe",
-      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--app-dir", "backend", "--port", "8000"],
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--app-dir", "backend", "--port", "8001"],
       "env": { "FORCE_FALLBACK": "1" },
-      "port": 8000
+      "port": 8001
     },
     {
       "name": "backend-live",

@@ -18,7 +18,7 @@ uvicorn app.main:app --reload --env-file .env   # dev server → http://127.0.0.
 pytest                               # full test suite
 pytest tests/test_summarizer.py -v   # single module
 python -m eval                       # accuracy vs eval/gold.jsonl (offline; --llm uses the API keys)
-FORCE_FALLBACK=1 uvicorn app.main:app --reload   # demo mode: never scrape live
+FORCE_FALLBACK=1 uvicorn app.main:app --reload --port 8001   # demo mode on :8001: never scrape live
 ```
 
 ### Frontend (`/frontend`, Next.js App Router, TypeScript, Tailwind)
