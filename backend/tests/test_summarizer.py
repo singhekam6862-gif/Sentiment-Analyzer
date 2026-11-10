@@ -90,10 +90,11 @@ def test_no_aspects_skips_llm(keys, fake_llm):
         (json.dumps({**GOOD_ANSWER, "pros": [{"text": "Made up", "aspect": "price_drop"}]}), []),
         (json.dumps({**GOOD_ANSWER, "pros": [{"text": " ", "aspect": "sound_quality"}]}), []),
         (json.dumps({**GOOD_ANSWER, "headline": ""}), None),
+        (json.dumps({**GOOD_ANSWER, "headline": "word " * 19}), None),
         (json.dumps({"pros": "abc"}), None),
         ("{broken", None),
     ],
-    ids=["valid", "unknown_aspect_dropped", "blank_dropped", "empty_headline", "missing_keys", "bad_json"],
+    ids=["valid", "unknown_aspect_dropped", "blank_dropped", "empty_headline", "long_headline", "missing_keys", "bad_json"],
 )
 def test_parse_llm_summary(raw, expected_pros):
     draft = summarizer.parse_llm_summary(raw, "groq", {"sound_quality", "mic_call_quality"})

@@ -47,7 +47,7 @@ export function AnalyseForm({ large = false }: { large?: boolean }) {
         <button
           type="submit"
           disabled={busy}
-          className={`${height} shrink-0 bg-accent px-5 font-semibold text-on-accent outline-on-accent -outline-offset-4 disabled:opacity-60`}
+          className={`${height} shrink-0 bg-paper px-5 font-semibold text-ink underline-offset-4 outline-ink -outline-offset-4 hover:underline disabled:opacity-60`}
         >
           {busy ? "Starting…" : "Analyse"}
         </button>

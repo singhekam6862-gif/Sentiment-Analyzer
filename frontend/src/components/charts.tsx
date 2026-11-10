@@ -11,7 +11,7 @@ import type { Analysis, Aspect, Review } from "@/types/analysis";
 export function RatingBars({ distribution }: { distribution: number[] }) {
   const total = distribution.reduce((sum, n) => sum + n, 0);
   return (
-    <ol data-chart className="stagger chart-dim flex flex-col gap-1.5" aria-label="Ratings by star">
+    <ol data-chart className="stagger chart-dim flex flex-col gap-1" aria-label="Ratings by star">
       {[5, 4, 3, 2, 1].map((star) => {
         const n = distribution[star - 1];
         const share = percent(n, total);

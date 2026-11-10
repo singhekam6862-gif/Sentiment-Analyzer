@@ -60,7 +60,7 @@ Trust signals (each lowers the score): unverified purchase; same-day burst (≥ 
 - A product with no template and no valid LLM answer returns `use_cases: []`; the rule-based headline then names aspects instead.
 
 ### A.7 Verdict, pros and cons
-- `verdict.headline`: one or two sentences ("Great for music and commuting at this price. Not for office calls, and it may not last a year.").
+- `verdict.headline`: short and backed by the counts. The LLM writes one sentence of about 14 words, and an answer over 18 words is rejected ("Good for music and commuting, weak on calls."). The rule-based fallback names at most the two good and two poor use cases with the most reviews.
 - `verdict.warning`: one sentence when long-term reliability has ≥ 2 complaints and no more praise than complaints; else `null`.
 - Up to 3 pros and 3 cons, each with the `review_ids` it came from.
 - Written by the LLM chain **from the aggregated opinion units**, not raw reviews. Deterministic fallback builds them from the top/bottom aspects. `generated_by` reports `groq`, `gemini` or `rule_based`.
@@ -169,7 +169,7 @@ Every `done` job is saved in `backend/app/data/cache.sqlite` (table `analyses`) 
     "collected_on": null
   },
   "verdict": {
-    "headline": "Great for music and commuting at this price. Not for office calls, and it may not last a year.",
+    "headline": "Good for music and commuting, weak on calls.",
     "warning": "4 owners say a part failed after 2–6 months.",
     "generated_by": "rule_based"
   },

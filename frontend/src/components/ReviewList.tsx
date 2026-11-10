@@ -38,7 +38,7 @@ function ReviewItem({ r, labels }: { r: Review; labels: Map<string, string> }) {
           {s.word}
         </span>
         {r.aspects.map((key) => (
-          <span key={key} className="rounded-full bg-wash px-2.5 py-0.5 text-muted">
+          <span key={key} className="rounded-full px-2.5 py-0.5 text-muted">
             {labels.get(key) ?? key.replace(/_/g, " ")}
           </span>
         ))}
@@ -52,7 +52,7 @@ export function ReviewList({ reviews, labels }: { reviews: Review[]; labels: Map
   const [all, setAll] = useState(false);
   const shown = reviews.filter((r) => r.group === group);
   return (
-    <Card id="all-reviews" title="The reviews" className="mt-4">
+    <Card id="all-reviews" title="The reviews" className="mt-6">
       <div role="group" aria-label="Show reviews" className="flex flex-wrap gap-2">
         {(Object.keys(GROUP_LABEL) as Review["group"][]).map((g) => (
           <button
@@ -63,7 +63,7 @@ export function ReviewList({ reviews, labels }: { reviews: Review[]; labels: Map
               setGroup(g);
               setAll(false);
             }}
-            className={`h-11 rounded-full border px-4 font-medium ${g === group ? "border-ink bg-ink text-paper" : "border-line hover:bg-wash"}`}
+            className={`h-11 rounded-full border px-4 font-medium ${g === group ? "border-selected bg-selected text-on-selected" : "border-line hover:bg-wash"}`}
           >
             {GROUP_LABEL[g]} {reviews.filter((r) => r.group === g).length}
           </button>

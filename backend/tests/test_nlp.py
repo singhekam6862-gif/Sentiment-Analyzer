@@ -3,8 +3,8 @@ from pathlib import Path
 import pytest
 
 from app import catalogue
-from app.schemas import Product, RawReview
-from app.nlp.analysis import analyse, build_use_cases
+from app.schemas import Product, RawReview, UseCase
+from app.nlp.analysis import analyse, build_use_cases, rule_based_headline
 from app.nlp.opinions import extract_opinions
 from app.nlp.preprocessor import normalize_review_text
 from app.nlp.trust_scorer import calculate_trust_scores
@@ -137,6 +137,14 @@ def test_realme_verdict_matches_the_reviews():
     assert result.verdict.warning is not None
     assert {r.review_id for r in result.reviews if r.group == "suspicious"} == {
         "fk_rt310_004", "fk_rt310_005", "fk_rt310_104", "fk_rt310_105"}
+
+
+def test_rule_based_headline_names_the_two_with_most_reviews():
+    uses = [UseCase(name=n, verdict=v, reason="r", review_count=c) for n, v, c in [
+        ("Gym", "good", 2), ("Music", "good", 9), ("Travel", "good", 5),
+        ("Calls", "poor", 7), ("Gaming", "poor", 3), ("Lasting", "poor", 4),
+    ]]
+    assert rule_based_headline(uses, []) == "Good for music and travel. Not for calls and lasting."
 
 
 def test_use_case_needs_two_mentions():

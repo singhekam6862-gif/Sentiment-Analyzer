@@ -7,8 +7,9 @@ from app.schemas import Aspect, UseCase
 
 SYSTEM_PROMPT = (
     "You write the buying verdict for one product sold on Flipkart, from aspect counts and real review quotes "
-    "(some in Hinglish). Reply with only a JSON object with keys 'headline' (one or two plain sentences: what it "
-    "is good for and what it is not), 'pros' and 'cons' (up to 3 each; every item is an object with 'text', a "
+    "(some in Hinglish). Reply with only a JSON object with keys 'headline' (one plain sentence of at most 14 words "
+    "naming the strongest praise and, if the counts show one, the strongest complaint, like 'Good for music and "
+    "commuting, weak on calls.'; no hype words), 'pros' and 'cons' (up to 3 each; every item is an object with 'text', a "
     "short specific point, and 'aspect', one of the aspect keys given). Use only what the counts and quotes "
     "support; do not invent specs."
 )
@@ -22,6 +23,7 @@ USE_CASE_PROMPT = (
     "that directly decides it, and don't name a kind of person the quotes don't mention. Use each aspect at most "
     "once. Fewer is better than a stretch: skip any aspect that says nothing about a use."
 )
+MAX_HEADLINE_WORDS = 18  # the prompt asks for 14; a model that runs well past it falls through to the next provider
 MAX_USE_CASE_NAME = 40  # longer names break the card layout
 MIN_MENTIONS = 2  # below this build_use_cases can only answer too_few
 
@@ -85,14 +87,14 @@ def _claims(items: object, keys: set[str]) -> list[tuple[str, str]]:
 
 
 def parse_llm_summary(raw_text: str, provider: str, keys: set[str]) -> Draft | None:
-    """Validates the model's JSON; drops claims about unknown aspects; None when the headline is missing."""
+    """Validates the model's JSON; drops claims about unknown aspects; None when the headline is missing or too long."""
     try:
         parsed = json.loads(raw_text)
         headline = str(parsed["headline"]).strip()
         pros, cons = _claims(parsed.get("pros", []), keys), _claims(parsed.get("cons", []), keys)
     except (ValueError, KeyError, TypeError, AttributeError):
         return None
-    return Draft(headline, pros, cons, provider) if headline else None
+    return Draft(headline, pros, cons, provider) if 0 < len(headline.split()) <= MAX_HEADLINE_WORDS else None
 
 
 def generate_summary(product_name: str, aspects: list[Aspect], use_cases: list[UseCase]) -> Draft | None:

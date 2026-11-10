@@ -12,14 +12,15 @@ export const metadata: Metadata = {
   description: "What Flipkart buyers actually say about a product, with the reviews to prove it.",
 };
 
-// Matches the masthead, which is near-black in both themes, so it doesn't need to follow the theme switch.
-export const viewport: Viewport = { themeColor: "#111111" };
+// shortcut: the light masthead colour until ThemeSwitch hydrates and syncs it, so dark users may see a white toolbar briefly.
+export const viewport: Viewport = { themeColor: "#ffffff" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     // suppressHydrationWarning: THEME_SCRIPT sets data-theme before React hydrates
     <html lang="en" data-theme="light" suppressHydrationWarning className={`${barlow.variable} ${condensed.variable}`}>
-      <body className="min-h-dvh bg-page font-sans text-ink antialiased">
+      {/* suppressHydrationWarning: extensions such as Grammarly add attributes to <body> */}
+      <body suppressHydrationWarning className="min-h-dvh bg-page font-sans text-ink antialiased">
         {/* Not in <head>: browser extensions inject scripts there and React would hydrate this tag against theirs */}
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <SiteHeader />

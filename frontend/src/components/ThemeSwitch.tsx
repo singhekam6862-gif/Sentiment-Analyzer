@@ -10,6 +10,9 @@ const CHANGED = "themechoice";
 function apply(choice: Choice) {
   const dark = choice === "dark" || (choice === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+  // Mobile browser toolbars match the header, whichever theme it's in.
+  const masthead = getComputedStyle(document.documentElement).getPropertyValue("--color-masthead");
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", masthead);
 }
 
 function readChoice(): Choice {
@@ -42,8 +45,11 @@ function pick(next: Choice) {
     window.dispatchEvent(new Event(CHANGED));
   };
   // Crossfades the whole page; browsers without view transitions just switch.
-  if (document.startViewTransition) document.startViewTransition(change);
-  else change();
+  if (!document.startViewTransition) return change();
+  const fade = document.startViewTransition(change);
+  // These reject if rendering stalls (a hidden tab, say). The theme still applies; only the fade is lost.
+  fade.ready.catch(() => {});
+  fade.updateCallbackDone.catch(() => {});
 }
 
 export function ThemeSwitch() {
@@ -60,15 +66,15 @@ export function ThemeSwitch() {
   }, [choice]);
 
   return (
-    <div role="group" aria-label="Colour theme" className="flex rounded-full border border-masthead-muted/40 p-0.5 text-sm">
+    <div role="group" aria-label="Colour theme" className="flex rounded-full border border-field p-0.5 text-sm">
       {CHOICES.map((c) => (
         <button
           key={c}
           type="button"
           aria-pressed={choice === c}
           onClick={() => pick(c)}
-          className={`h-9 rounded-full px-2.5 font-medium sm:min-w-14 sm:px-3 ${
-            choice === c ? "bg-on-masthead text-masthead" : "text-masthead-muted hover:text-on-masthead"
+          className={`h-9 rounded-full px-2 font-medium sm:min-w-14 sm:px-3 ${
+            choice === c ? "bg-selected text-on-selected" : "text-masthead-muted hover:text-on-masthead"
           }`}
         >
           {LABEL[c]}

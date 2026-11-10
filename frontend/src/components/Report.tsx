@@ -40,19 +40,19 @@ function useReveal() {
 
 function VerdictCard({ analysis }: { analysis: Analysis }) {
   const { verdict, funnel } = analysis;
-  const by = verdict.generated_by === "rule_based" ? "rules from the review counts" : verdict.generated_by;
+  const by = verdict.generated_by === "rule_based" ? "rules from the counts" : verdict.generated_by;
   return (
-    <section data-reveal aria-label="Verdict" className="stagger lines flex flex-col rounded-xl border border-verdict-line bg-verdict p-6 text-on-masthead md:col-span-2 md:p-8">
-      <p className="text-xs font-semibold uppercase tracking-widest text-masthead-muted">Verdict</p>
-      <p className="mt-2 max-w-3xl text-2xl font-semibold leading-snug md:text-3xl">{verdict.headline}</p>
+    <section data-reveal aria-labelledby="verdict" className="stagger lines flex min-w-0 flex-col rounded-xl border border-verdict-line bg-verdict p-5 text-on-verdict @2xl:col-span-3">
+      <h2 id="verdict" className="font-display text-xl font-bold uppercase tracking-wide md:text-2xl">Verdict</h2>
+      <p className="mt-3 max-w-3xl text-pretty text-xl font-semibold leading-snug @md:text-lg @2xl:text-xl">{verdict.headline}</p>
       {verdict.warning && (
-        <p className="mt-4 flex gap-2 text-base text-masthead-warn">
+        <p className="mt-3 flex gap-2 text-base text-verdict-warn">
           <span aria-hidden="true">▲</span>
           {verdict.warning}
         </p>
       )}
-      <p className="mt-auto pt-6 text-sm text-masthead-muted">
-        From {plural(funnel.analysed, "product review")}, written by {by}. Every quote is copied from a real review.
+      <p className="mt-auto pt-4 text-sm text-verdict-muted">
+        Based on {funnel.analysed} of {plural(funnel.collected, "review")}, written by {by}.
       </p>
     </section>
   );
@@ -60,16 +60,20 @@ function VerdictCard({ analysis }: { analysis: Analysis }) {
 
 function RatingCard({ rating }: { rating: Analysis["rating"] }) {
   return (
-    <Card id="ratings" title="Ratings">
-      <p className="flex items-baseline gap-2">
-        <span className="font-display text-6xl font-bold leading-none"><CountUp value={rating.average} decimals={1} /></span>
-        <span className="pop-late text-2xl" aria-hidden="true">★</span>
-        <span className="text-muted">from {plural(rating.count, "rating")}</span>
-      </p>
-      <div className="mt-5">
+    // Not a Card: in the hero's narrow column the heading sits beside the bars, which keeps this card short.
+    <section data-reveal aria-labelledby="ratings" className="flex min-w-0 flex-col gap-4 rounded-xl border border-line bg-paper p-5 transition-colors duration-200 hover:border-muted @md:flex-row @md:items-center @md:gap-6 @2xl:col-span-2 @2xl:flex-col @2xl:items-stretch">
+      <div className="shrink-0">
+        <h2 id="ratings" className="font-display text-xl font-bold uppercase tracking-wide md:text-2xl">Ratings</h2>
+        <p className="mt-2 flex items-baseline gap-2">
+          <span className="font-display text-5xl font-bold leading-none"><CountUp value={rating.average} decimals={1} /></span>
+          <span className="pop-late text-2xl" aria-hidden="true">★</span>
+        </p>
+        <p className="mt-1 text-sm text-muted">from {plural(rating.count, "rating")}</p>
+      </div>
+      <div className="min-w-0 flex-1">
         <RatingBars distribution={rating.distribution} />
       </div>
-    </Card>
+    </section>
   );
 }
 
@@ -83,12 +87,12 @@ function StatTiles({ analysis }: { analysis: Analysis }) {
     { n: reviews.filter((r) => r.verified_purchase).length, of: funnel.collected, label: "from certified buyers" },
   ];
   return (
-    <ul className="stagger mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+    <ul className="stagger mt-10 grid grid-cols-2 gap-4 md:grid-cols-4 md:gap-6">
       {tiles.map((t) => {
         const share = percent(t.n, t.of);
         return (
           <li data-reveal key={t.label} className="lift rounded-xl border border-line bg-paper p-4 hover:border-ink">
-            <p className="font-display text-4xl font-bold leading-none">
+            <p className="font-display text-3xl font-bold leading-none">
               {share === null ? <><CountUp value={t.n} /> of {t.of}</> : <><CountUp value={share} />%</>}
             </p>
             <p className="mt-1 text-sm font-semibold">{t.label}</p>
@@ -118,7 +122,7 @@ function ClaimCard({ id, title, items, tone }: { id: string; title: string; item
 
 function SpecsCard({ specs }: { specs: SpecGroup[] }) {
   return (
-    <Card id="specs" title="Specifications" note="As listed on Flipkart, not checked against reviews." className="mt-4">
+    <Card id="specs" title="Specifications" note="As listed on Flipkart, not checked against reviews." className="mt-6">
       {specs.map((group, i) => (
         <details key={i} open={i === 0} className="border-t border-line py-3 first:border-t-0 first:pt-0">
           <summary className="cursor-pointer font-semibold">
@@ -148,24 +152,27 @@ export function Report({ analysis }: { analysis: Analysis }) {
   const root = useReveal();
   return (
     <main ref={root} className="mx-auto max-w-6xl px-4 pb-20 pt-8 sm:px-6 md:pt-12">
-      <header className="rise flex flex-col gap-4 md:flex-row md:items-center md:gap-6">
-        <ProductGallery images={product.images} name={product.name} />
-        <div className="min-w-0">
+      {/* Flat on purpose: phones read title, photo, cards. The auto column collapses when there are no photos. */}
+      <div className="grid gap-y-6 hero:grid-cols-[minmax(0,1fr)_auto] hero:grid-rows-[auto_1fr]">
+        <header className="rise min-w-0">
           <p className="text-sm text-muted">
             {product.category} · {product.data_source === "live_scrape" ? `Collected ${product.collected_on}` : "Flipkart reviews"}
           </p>
-          <h1 className="mt-1 font-display text-3xl font-bold capitalize leading-tight md:text-5xl">{product.name}</h1>
+          <h1 className="mt-1 font-display text-3xl font-bold capitalize leading-tight md:text-4xl">{product.name}</h1>
+        </header>
+        <ProductGallery images={product.images} name={product.name} />
+        <div className="@container min-w-0 hero:col-start-1">
+          <div className="stagger grid h-full grid-rows-[1fr_auto] gap-6 @2xl:grid-cols-5 @2xl:grid-rows-1">
+            <VerdictCard analysis={analysis} />
+            <RatingCard rating={analysis.rating} />
+          </div>
         </div>
-      </header>
-      <div className="stagger mt-6 grid gap-4 md:grid-cols-3">
-        <VerdictCard analysis={analysis} />
-        <RatingCard rating={analysis.rating} />
       </div>
       <StatTiles analysis={analysis} />
       <Card id="mentions" title="What reviewers mention" note="Bars count the reviews that praise or complain about each feature. The percentage is the share of those that praise it, leaving out mixed reviews. Select a row to read them." className="mt-8">
         <AspectChart aspects={analysis.aspects} onOpen={setOpen} />
       </Card>
-      <div className="stagger mt-4 grid gap-4 md:grid-cols-2">
+      <div className="stagger mt-6 grid gap-6 md:grid-cols-2">
         <Card id="funnel" title={`How we read ${plural(funnel.collected, "review")}`} className={timeline ? "" : "md:col-span-2"}>
           <FunnelBar funnel={funnel} />
         </Card>
@@ -175,7 +182,7 @@ export function Report({ analysis }: { analysis: Analysis }) {
           </Card>
         )}
       </div>
-      <div className="stagger mt-4 grid gap-4 md:grid-cols-2">
+      <div className="stagger mt-6 grid gap-6 md:grid-cols-2">
         <ClaimCard id="pros" title="What buyers like" items={analysis.pros} tone="border-praise" />
         <ClaimCard id="cons" title="What buyers don’t like" items={analysis.cons} tone="border-complaint" />
       </div>

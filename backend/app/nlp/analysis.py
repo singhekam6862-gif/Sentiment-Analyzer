@@ -82,7 +82,7 @@ def build_use_cases(template: list[tuple[str, list[str]]], aspects: list[Aspect]
 def reliability_warning(aspects: list[Aspect]) -> str | None:
     a = next((a for a in aspects if a.key == RELIABILITY), None)
     if a and a.complaints >= 2 and a.praise <= a.complaints:
-        return f"{a.complaints} owners say it failed or got worse after weeks or months of use."
+        return f"{a.complaints} owners say it failed or got worse over time."
     return None
 
 
@@ -91,8 +91,10 @@ def _join(words: list[str]) -> str:
 
 
 def rule_based_headline(use_cases: list[UseCase], aspects: list[Aspect]) -> str:
-    good = [u.name.lower() for u in use_cases if u.verdict == "good"]
-    poor = [u.name.lower() for u in use_cases if u.verdict == "poor"]
+    # Only the two with the most reviews behind them, to stay short; the rest are in the aspect rows.
+    strongest = sorted(use_cases, key=lambda u: u.review_count, reverse=True)
+    good = [u.name.lower() for u in strongest if u.verdict == "good"][:2]
+    poor = [u.name.lower() for u in strongest if u.verdict == "poor"][:2]
     if not good and not poor:
         good = [a.label.lower() for a in aspects if a.praise > a.complaints][:2]
         poor = [a.label.lower() for a in aspects if a.complaints > a.praise][:2]
