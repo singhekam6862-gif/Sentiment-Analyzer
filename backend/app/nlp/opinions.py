@@ -11,7 +11,7 @@ from app.nlp import llm
 from app.nlp.absa_engine import extract_aspects_from_clause, score_clause_sentiment, split_into_clauses
 from app.nlp.categories import RELIABILITY
 from app.nlp.preprocessor import normalize_review_text
-from app.schemas import RawReview
+from app.schemas import AspectKey, RawReview
 
 Opinion = tuple[str, str, str]  # (aspect key, praise|complaint|mixed, quote)
 
@@ -52,15 +52,19 @@ def _polarity(score: float) -> str:
     return "praise" if score >= 60 else "complaint" if score <= 40 else "mixed"
 
 
-def extract_opinions(review: RawReview) -> list[Opinion]:
-    """Rule-based path: one unit per aspect per review; each quote is a clause copied from review.text."""
+def extract_opinions(review: RawReview, allowed: set[str] | None = None) -> list[Opinion]:
+    """Rule-based path: one unit per aspect per review; each quote is a clause copied from review.text.
+
+    allowed: keyword aspects to keep (None keeps all); the keyword lists are earbud-specific.
+    """
     units: dict[str, tuple[str, str]] = {}
     for clause in split_into_clauses(review.text):
         clause = clause.strip(" ,")  # still a verbatim substring
         cleaned = normalize_review_text(clause)["cleaned_text"]
         polarity = _polarity(score_clause_sentiment(cleaned, review.rating))
         for aspect in extract_aspects_from_clause(cleaned):
-            units.setdefault(aspect.value, (polarity, clause))
+            if allowed is None or aspect.value in allowed:
+                units.setdefault(aspect.value, (polarity, clause))
         # Long-term cues only count as reliability evidence from clearly happy or unhappy owners.
         if RELIABILITY not in units and review.rating != 3 and LONG_TERM.search(clause):
             units[RELIABILITY] = ("praise" if review.rating >= 4 else "complaint", clause)
@@ -103,6 +107,8 @@ def extract_all_opinions(
     """
     out: dict[str, list[Opinion]] = {}
     keys = list(suggested)
+    # Earbud keywords ("call", "hours", "fit") misfire on other products; value for money fits any product.
+    allowed = set(suggested) | {AspectKey.VALUE_FOR_MONEY.value}
     failed: set[str] = set()
     total = -(-len(reviews) // BATCH_SIZE)
     for n, start in enumerate(range(0, len(reviews), BATCH_SIZE), 1):
@@ -111,7 +117,7 @@ def extract_all_opinions(
         found = llm.ask(SYSTEM_PROMPT, build_prompt(list(batch.values()), keys),
                         lambda raw, _provider, batch=batch: parse_opinions(raw, batch), skip=failed)
         if found is None:
-            found = {rid: extract_opinions(r) for rid, r in batch.items()}
+            found = {rid: extract_opinions(r, allowed) for rid, r in batch.items()}
         out.update(found)
         keys = list(dict.fromkeys(keys + [k for units in found.values() for k, _, _ in units]))
     return out

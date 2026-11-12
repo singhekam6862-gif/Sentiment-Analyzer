@@ -65,6 +65,14 @@ def test_without_keys_uses_rules_and_no_network(fake_llm):
     assert ("long_term_reliability", "complaint", "After 2 months the speaker stopped working") in found["p3"]
 
 
+def test_rules_skip_earbud_aspects_on_other_products(fake_llm):
+    """A geyser review about customer care calls must not become a 'Calls and mic' opinion."""
+    fake_llm({"groq": {}})
+    geyser = [review("g1", "Great value for money. Customer care calling was very smooth.", 5)]
+    found = opinions.extract_all_opinions(geyser, ["long_term_reliability"])
+    assert [key for key, _, _ in found["g1"]] == ["value_for_money"]
+
+
 def test_llm_units_are_used_and_keys_carry_to_later_batches(keys, fake_llm, monkeypatch):
     monkeypatch.setattr(opinions, "BATCH_SIZE", 2)
     fake = fake_llm(lambda _provider, body: answer_for(body["messages"][1]["content"]))
